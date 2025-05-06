@@ -882,15 +882,18 @@ function switchToRandomTrack() {
 
 // Utility Functions
 
-// Format time in seconds to MM:SS format
+// Format time in seconds to MM:SS.ss format
 function formatTime(seconds) {
-  if (isNaN(seconds)) return '0:00';
-  
-  seconds = Math.floor(seconds);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  if (isNaN(seconds) || seconds < 0) return '0:00.00';
+
+  const totalSeconds = seconds; // Keep the original value with decimals
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = (totalSeconds % 60).toFixed(2); // Get seconds with 2 decimal places
+
+  // Pad the whole seconds part if needed (e.g., 5.50 -> 05.50)
+  const paddedSeconds = remainingSeconds.padStart(5, '0'); // 5 characters for "SS.ss" (e.g., "05.50")
+
+  return `${minutes}:${paddedSeconds}`;
 }
 
 // Escape HTML to prevent XSS
