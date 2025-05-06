@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DM Player</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <h1>DM Player</h1>
+            <div id="navigation">
+                <button id="back-button" class="hidden"><i class="fas fa-arrow-left"></i> Back to Projects</button>
+            </div>
+        </header>
+
+        <!-- Project List View -->
+        <div id="project-list-view">
+            <div class="section-header">
+                <h2>Projects</h2>
+                <button id="create-project-btn" class="action-button">
+                    <i class="fas fa-plus"></i> New Project
+                </button>
+            </div>
+            <div id="projects-container" class="list-container">
+                <!-- Projects will be dynamically added here -->
+                <div class="empty-message">No projects yet. Create one to get started!</div>
+            </div>
+        </div>
+
+        <!-- Project Detail View (hidden initially) -->
+        <div id="project-detail-view" class="hidden">
+            <div class="project-info">
+                <h2 id="project-name">Project Name</h2>
+            </div>
+
+            <!-- Tracks Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h3>Tracks</h3>
+                    <button id="upload-track-btn" class="action-button">
+                        <i class="fas fa-plus"></i> Add Track
+                    </button>
+                </div>
+                <div id="tracks-container" class="list-container">
+                    <!-- Tracks will be dynamically added here -->
+                    <div class="empty-message">No tracks yet. Upload some to get started!</div>
+                </div>
+                <input type="file" id="track-upload-input" accept=".mp3" multiple style="display: none;">
+            </div>
+
+            <!-- Cue Points Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h3>Cue Points</h3>
+                    <button id="add-cue-btn" class="action-button">
+                        <i class="fas fa-plus"></i> Add Cue Point
+                    </button>
+                </div>
+                <div id="cues-container" class="list-container">
+                    <!-- Cue points will be dynamically added here -->
+                    <div class="empty-message">No cue points yet. Add some to enable track switching!</div>
+                </div>
+            </div>
+
+            <!-- Player Controls -->
+            <div class="player-controls">
+                <div class="time-display">
+                    <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+                </div>
+                <div class="progress-container">
+                    <div id="progress-bar">
+                        <div id="progress-indicator"></div>
+                    </div>
+                </div>
+                <div class="control-buttons">
+                    <button id="play-btn" class="control-button">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="pause-btn" class="control-button hidden">
+                        <i class="fas fa-pause"></i>
+                    </button>
+                    <button id="stop-btn" class="control-button">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                </div>
+                <div class="now-playing">
+                    <span>Now Playing: </span>
+                    <span id="current-track-name">None</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="create-project-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Create New Project</h3>
+            <form id="create-project-form">
+                <div class="form-group">
+                    <label for="project-name-input">Project Name:</label>
+                    <input type="text" id="project-name-input" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="add-cue-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Add Cue Point</h3>
+            <form id="add-cue-form">
+                <div class="form-group">
+                    <label for="cue-time-input">Time (seconds):</label>
+                    <input type="number" id="cue-time-input" step="0.1" min="0" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-cue-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Cue Point</h3>
+            <form id="edit-cue-form">
+                <input type="hidden" id="edit-cue-id">
+                <div class="form-group">
+                    <label for="edit-cue-time-input">Time (seconds):</label>
+                    <input type="number" id="edit-cue-time-input" step="0.1" min="0" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-project-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Project</h3>
+            <form id="edit-project-form">
+                <input type="hidden" id="edit-project-id">
+                <div class="form-group">
+                    <label for="edit-project-name-input">Project Name:</label>
+                    <input type="text" id="edit-project-name-input" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="overlay" class="hidden"></div>
+
+    <!-- Audio Element (hidden) -->
+    <audio id="audio-player"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
