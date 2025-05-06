@@ -763,87 +763,120 @@ function updateUpcomingCuePoints() {
 
 // Check if we've reached a cue point
 function checkCuePoints() {
-  if (!isPlaying || !upcomingCuePoints.length || isTrackSwitching) return;
-  
+  // Add check for audioPlayer readiness state > 0 to avoid checks before metadata is loaded
+  // Also check if upcomingCuePoints actually has items before accessing index 0
+  if (!isPlaying || !upcomingCuePoints.length || isTrackSwitching || audioPlayer.readyState === 0) return;
+
   const currentTime = audioPlayer.currentTime;
-  
+
   // Check if we've passed the next cue point
-  if (upcomingCuePoints[0].time <= currentTime) {
-    // Remove the cue point we just passed
-    upcomingCuePoints.shift();
-    
+  // Use >= comparison for robustness
+  if (currentTime >= upcomingCuePoints[0].time) {
+    const passedCuePoint = upcomingCuePoints.shift(); // Store the passed cue point for potential logging
+    console.log(`Passed cue point at ${passedCuePoint.time}s`);
+
     // Switch to a random track
     switchToRandomTrack();
-    
-    // Update upcoming cue points after track switch
-    updateUpcomingCuePoints();
+
+    // DO NOT updateUpcomingCuePoints() here. It will be updated after the switch completes.
   }
 }
 
+
 // Switch to a random track
 function switchToRandomTrack() {
-  if (!currentProject || !currentProject.tracks.length || isTrackSwitching) return;
-  
-  // Set flag to prevent multiple track switches at once
+  // Ensure only one switch happens at a time
+  if (isTrackSwitching) {
+    console.log('Track switch already in progress, skipping.');
+    return;
+  }
+  if (!currentProject || !currentProject.tracks.length) {
+    console.log('No project or tracks available for switching.');
+    return;
+  }
+
   isTrackSwitching = true;
-  
+  console.log('Initiating track switch...');
+
   try {
-    // Get available tracks (excluding current track)
     const availableTracks = currentProject.tracks.filter(t => t.id !== currentTrack?.id);
-    
-    // If no other tracks available, keep playing the current one
+
     if (!availableTracks.length) {
+      console.log('No other tracks available, continuing current track.');
       isTrackSwitching = false;
+      // If only one track, we might need to reset upcomingCuePoints if it's empty now
+      // or if the loop should stop. Let's re-evaluate from current time.
+      updateUpcomingCuePoints();
       return;
     }
-    
-    // Select a random track
+
     const randomIndex = Math.floor(Math.random() * availableTracks.length);
     const newTrack = availableTracks[randomIndex];
-    
-    // Remember current time
-    const currentTime = audioPlayer.currentTime;
-    
-    // Set new track
+    const previousTime = audioPlayer.currentTime; // Store time *before* changing src
+
+    console.log(`Switching from ${currentTrack?.originalName || 'None'} to track: ${newTrack.originalName} at time ${previousTime.toFixed(2)}s`);
+
     currentTrack = newTrack;
     audioPlayer.src = `/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
     currentTrackNameElement.textContent = newTrack.originalName;
-    
-    // When metadata is loaded, set the current time and play
+
+    // Use { once: true } for safety to ensure listeners don't stack up
     audioPlayer.addEventListener('loadedmetadata', function onMetadataLoaded() {
+      console.log(`Metadata loaded for ${newTrack.originalName}. Duration: ${audioPlayer.duration.toFixed(2)}s`);
       try {
-        // Set current time (clamped to valid range)
-        const seekTime = Math.min(currentTime, audioPlayer.duration);
-        audioPlayer.currentTime = seekTime;
-        
-        // Play the audio
+        // Clamp seekTime to the new track's duration
+        const seekTime = Math.min(previousTime, audioPlayer.duration);
+        console.log(`Seeking ${newTrack.originalName} to: ${seekTime.toFixed(2)}s`);
+        // Setting currentTime can sometimes throw an error if the state is wrong
+        if (audioPlayer.readyState >= 1) { // HAVE_METADATA or higher
+             audioPlayer.currentTime = seekTime;
+        } else {
+             console.warn('Audio not ready for seeking, playback might start from 0.');
+        }
+
+
+        // Ensure we are still supposed to be playing
+        if (!isPlaying) {
+           console.log('Playback was stopped during track switch. Aborting play.');
+           updateUpcomingCuePoints(); // Update cues even if not playing now
+           isTrackSwitching = false;
+           return;
+        }
+
         audioPlayer.play()
           .then(() => {
-            // Reset the track switching flag once playback has started
+            console.log(`Playback started for ${newTrack.originalName} at ${audioPlayer.currentTime.toFixed(2)}s`);
+            // Update upcoming cue points *after* successful playback start
+            updateUpcomingCuePoints();
+            // Reset the flag *after* everything is done
             isTrackSwitching = false;
+            console.log('Track switch complete.');
           })
           .catch(error => {
             console.error('Error playing audio after switch:', error);
-            isTrackSwitching = false; // Reset flag even if there's an error
+            // Still update cues and reset flag on error
+            updateUpcomingCuePoints();
+            isTrackSwitching = false;
           });
       } catch (error) {
-        console.error('Error during track switch:', error);
-        isTrackSwitching = false; // Reset flag if there's an error
+        console.error('Error during loadedmetadata handling:', error);
+        updateUpcomingCuePoints();
+        isTrackSwitching = false;
       }
-      
-      // Remove this event listener to avoid multiple calls
-      audioPlayer.removeEventListener('loadedmetadata', onMetadataLoaded);
-    });
-    
-    // Add error handler for loading the audio
-    audioPlayer.addEventListener('error', function onError() {
-      console.error('Error loading audio:', audioPlayer.error);
-      isTrackSwitching = false; // Reset flag if there's an error
-      audioPlayer.removeEventListener('error', onError);
-    }, { once: true });
+    }, { once: true }); // Use once: true
+
+    audioPlayer.addEventListener('error', function onError(e) {
+      console.error(`Error loading audio source ${audioPlayer.src}:`, audioPlayer.error, e);
+      // Reset flag and update cues if loading fails
+      updateUpcomingCuePoints();
+      isTrackSwitching = false;
+    }, { once: true }); // Use once: true
+
   } catch (error) {
     console.error('Error during track switch setup:', error);
-    isTrackSwitching = false; // Reset flag if there's an error
+    // Reset flag if setup fails
+    updateUpcomingCuePoints(); // Try to update cues anyway
+    isTrackSwitching = false;
   }
 }
 
