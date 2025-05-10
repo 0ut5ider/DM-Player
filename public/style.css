@@ -413,6 +413,28 @@ header h1 {
   z-index: 999;
 }
 
+/* Section Row Layout */
+.section-row {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+.section-tracks {
+  flex: 0 0 75%;
+}
+.section-cues {
+  flex: 0 0 25%;
+}
+
+/* Enlarged control buttons */
+.control-buttons #play-btn,
+.control-buttons #pause-btn,
+.control-buttons #stop-btn {
+  width: 60px;
+  height: 60px;
+  font-size: 1.2rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-container {

@@ -37,35 +37,6 @@
                 <h2 id="project-name">Project Name</h2>
             </div>
 
-            <!-- Tracks Section -->
-            <div class="section">
-                <div class="section-header">
-                    <h3>Tracks</h3>
-                    <button id="upload-track-btn" class="action-button">
-                        <i class="fas fa-plus"></i> Add Track
-                    </button>
-                </div>
-                <div id="tracks-container" class="list-container">
-                    <!-- Tracks will be dynamically added here -->
-                    <div class="empty-message">No tracks yet. Upload some to get started!</div>
-                </div>
-                <input type="file" id="track-upload-input" accept=".mp3" multiple style="display: none;">
-            </div>
-
-            <!-- Cue Points Section -->
-            <div class="section">
-                <div class="section-header">
-                    <h3>Cue Points</h3>
-                    <button id="add-cue-btn" class="action-button">
-                        <i class="fas fa-plus"></i> Add Cue Point
-                    </button>
-                </div>
-                <div id="cues-container" class="list-container">
-                    <!-- Cue points will be dynamically added here -->
-                    <div class="empty-message">No cue points yet. Add some to enable track switching!</div>
-                </div>
-            </div>
-
             <!-- Player Controls -->
             <div class="player-controls">
                 <div class="time-display">
@@ -92,6 +63,38 @@
                     <span id="current-track-name">None</span>
                 </div>
             </div>
+
+            <!-- Tracks Section -->
+            <div class="section-row">
+                <div class="section section-tracks">
+                <div class="section-header">
+                    <h3>Tracks</h3>
+                    <button id="upload-track-btn" class="action-button" title="Add Track">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div id="tracks-container" class="list-container">
+                    <!-- Tracks will be dynamically added here -->
+                    <div class="empty-message">No tracks yet. Upload some to get started!</div>
+                </div>
+                <input type="file" id="track-upload-input" accept=".mp3" multiple style="display: none;">
+            </div>
+
+            <!-- Cue Points Section -->
+                <div class="section section-cues">
+                <div class="section-header">
+                    <h3>Cue Points</h3>
+                    <button id="add-cue-btn" class="action-button" title="Add Cue Point">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div id="cues-container" class="list-container">
+                    <!-- Cue points will be dynamically added here -->
+                    <div class="empty-message">No cue points yet. Add some to enable track switching!</div>
+                </div>
+            </div>
+            </div> <!-- end section-row -->
+
         </div>
     </div>
 
