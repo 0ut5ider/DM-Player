@@ -1,9 +1,13 @@
 {
   "app_type": "node",
   "startup_file": "app.js",
+  "node_version": "10.24.1",
   "envvars": {
     "NODE_ENV": "production",
-    "PORT": "3000"
+    "PORT": "3000",
+    "BASE_PATH": "/dmplayer"
   },
-  "log_file": "passenger.log"
+  "log_file": "passenger.log",
+  "document_root": "public",
+  "app_root": "."
 }

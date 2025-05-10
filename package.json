@@ -1,27 +1,30 @@
 {
   "name": "dm-player",
   "version": "1.0.0",
-  "description": "Dynamic Music player",
+  "description": "A simple audio player for DMs",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/0ut5ider/DM-Player.git"
-  },
-  "keywords": [],
+  "keywords": [
+    "audio",
+    "player",
+    "dm",
+    "rpg"
+  ],
   "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/0ut5ider/DM-Player/issues"
-  },
-  "homepage": "https://github.com/0ut5ider/DM-Player#readme",
   "dependencies": {
-    "express": "^5.1.0",
-    "multer": "^1.4.5-lts.2",
-    "music-metadata": "^11.2.1",
-    "uuid": "^11.1.0"
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "music-metadata": "^7.13.4",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=10.0.0"
   }
 }
