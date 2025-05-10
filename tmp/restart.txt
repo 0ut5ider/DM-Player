@@ -1,0 +1,2 @@
+This file is used by Passenger to restart the application.
+The content doesn't matter, only the file's existence and modification time.

@@ -1,0 +1,9 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/username/public_html/dmplayer
+    - /bin/cp -R * $DEPLOYPATH
+    - /bin/cp .passenger.json $DEPLOYPATH
+    - /bin/cp .htaccess $DEPLOYPATH
+    - cd $DEPLOYPATH
+    - npm install --production
