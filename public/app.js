@@ -686,7 +686,7 @@ function showAddCueModal() {
 
 function showEditCueModal(cue) {
   document.getElementById('edit-cue-id').value = cue.id;
-  document.getElementById('edit-cue-time-input').value = cue.time;
+  document.getElementById('edit-cue-time-input').value = parseFloat(cue.time).toFixed(2);
   
   editCueModal.classList.remove('hidden');
   overlay.classList.remove('hidden');

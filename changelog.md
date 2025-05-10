@@ -10,4 +10,4 @@
 - Dragging the circular handle or clicking the progress bar will now seek the audio; if the seek position passes the next cue point, it triggers an immediate random track switch just as during normal playback. Indicator, handle, and time display remain in sync throughout.
 1.0.6 : Added a new cue‐point timeline above the main progress bar, and added dots indicating various cue points.
 1.0.7 : Updated the application to display the version number
-
+1.0.8 : Display 2 decimal points in cue point editors

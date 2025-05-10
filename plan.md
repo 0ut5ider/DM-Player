@@ -494,4 +494,7 @@ The cue point color dots in the list are now generated immediately when `renderC
 ---
 I've updated the application to display the version number "v1.0.7" beneath the "DM Player" title. The version is stored in the `appVersion` constant in `public/app.js` and can be manually changed there when a new version is deployed.
 ---
+I've updated the `showEditCueModal` function in `public/app.js` to ensure that cue point time values are displayed with a maximum of two decimal places when editing. The `cue.time` value is now parsed as a float and then formatted to two decimal places using `toFixed(2)` before being set as the value of the `edit-cue-time-input` element.
+---
+
 
