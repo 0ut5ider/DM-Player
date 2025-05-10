@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DM Player Static Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DM Player Static File Test</h1>
+        <p class="success">Success! This static HTML file is being served correctly.</p>
+        
+        <h2>What This Means</h2>
+        <p>If you can see this page, it means that:</p>
+        <ol>
+            <li>The web server is running</li>
+            <li>Static file serving is working correctly</li>
+            <li>The public directory is accessible</li>
+        </ol>
+        
+        <h2>Next Steps</h2>
+        <p>Try accessing the following URLs:</p>
+        <ul>
+            <li><a href="/dmplayer">/dmplayer</a> - Main application</li>
+            <li><a href="/dmplayer/api/test">/dmplayer/api/test</a> - API test endpoint</li>
+        </ul>
+        
+        <h2>Timestamp</h2>
+        <p>This page was generated at: <span id="timestamp"></span></p>
+    </div>
+
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toString();
+    </script>
+</body>
+</html>
