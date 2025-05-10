@@ -1,4 +1,5 @@
 // Global state
+const appVersion = "1.0.7";
 let currentProject = null;
 let cueColors = {};
 let draggingCueId = null;
@@ -45,7 +46,18 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Set up event listeners
   setupEventListeners();
+
+  // Display app version
+  displayAppVersion();
 });
+
+// Display App Version
+function displayAppVersion() {
+  const versionElement = document.getElementById('app-version');
+  if (versionElement) {
+    versionElement.textContent = `v${appVersion}`;
+  }
+}
 
 // Setup all event listeners
 function setupEventListeners() {

@@ -491,3 +491,7 @@ Added a new cue‐point timeline above the main progress bar, styled via CSS, an
 Adjusted cue‐timeline initialization: `updateCueTimeline` now runs on initial render with track‐duration fallback, and is invoked in `renderCuePoints`. Cue‐point dots will appear immediately upon entering a project, before playback starts.
 --
 The cue point color dots in the list are now generated immediately when `renderCuePoints` is called. Additionally, the cue timeline dragging logic now uses a fallback to the first track's duration if `audioPlayer.duration` is not yet available, ensuring correct time calculation even before playback starts.
+---
+I've updated the application to display the version number "v1.0.7" beneath the "DM Player" title. The version is stored in the `appVersion` constant in `public/app.js` and can be manually changed there when a new version is deployed.
+---
+

@@ -40,15 +40,27 @@ body {
 header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: center; /* Changed to center for better alignment with title-container */
   margin-bottom: 30px;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--border-color);
 }
 
+.title-container {
+  display: flex;
+  flex-direction: column;
+}
+
 header h1 {
   color: var(--primary-color);
   font-size: 2rem;
+  margin-bottom: 0; /* Remove default margin if any */
+}
+
+.app-version-text {
+  font-size: 0.9rem; /* Adjust as needed */
+  color: #aaaaaa; /* Light grey */
+  margin-top: -5px; /* Adjust for closer spacing under title */
 }
 
 #navigation {
