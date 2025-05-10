@@ -6,11 +6,12 @@ const { v4: uuidv4 } = require('uuid');
 const mm = require('music-metadata');
 
 const app = express();
+const basePath = process.env.PASSENGER_BASE_URI || process.env.BASE_URL || '';
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
-app.use(express.static('public'));
+app.use(basePath, express.static(path.join(__dirname, 'public')));
 
 // Ensure projects directory exists
 if (!fs.existsSync('./projects')) {
@@ -384,6 +385,16 @@ app.get('/projects/:projectId/audio/:trackId', (req, res) => {
   }
 });
 
+ // SPA root route for base path
+ app.get(basePath, (req, res) => {
+   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+ });
+
+ // SPA fallback route for client-side routing
+ app.get(basePath + '/*', (req, res) => {
+   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+ });
+ 
  // Start the server
  app.listen(PORT, '0.0.0.0', () => {
    console.log(`Server running on port ${PORT}`);
