@@ -402,9 +402,9 @@ app.get(`${BASE_PATH}`, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Redirect root to the base path
+// Serve a simple message at the root path
 app.get('/', (req, res) => {
-  res.redirect(BASE_PATH);
+  res.send('DM Player is running. Please access the application at <a href="/dmplayer">/dmplayer</a>');
 });
 
 // Only start the server if we're not being required by another module

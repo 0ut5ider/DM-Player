@@ -34,8 +34,5 @@ except Exception as e:
 # This is a fallback WSGI application that will be called if Passenger
 # doesn't properly redirect to the Node.js application
 def application(environ, start_response):
-    start_response('302 Found', [
-        ('Content-Type', 'text/html'),
-        ('Location', '/dmplayer')
-    ])
-    return [b"<html><body><h1>Redirecting to Node.js application...</h1><p>If you're seeing this message, please click <a href='/dmplayer'>here</a> to go to the application.</p></body></html>"]
+    start_response('200 OK', [('Content-Type', 'text/html')])
+    return [b"<html><body><h1>Node.js Application Error</h1><p>The Node.js application could not be started. Please check the server logs for more information.</p></body></html>"]

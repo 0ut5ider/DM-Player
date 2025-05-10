@@ -1,19 +1,31 @@
-# Enable the RewriteEngine
-RewriteEngine On
-
-# Set the base path
-RewriteBase /dmplayer
-
-# Don't rewrite files or directories
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^ - [L]
-
-# Rewrite everything else to index.html to allow html5 state links
-RewriteRule ^ index.html [L]
-
-# Set Passenger app root to the current directory
+# Enable Passenger for Node.js
+PassengerEnabled on
+PassengerAppType node
+PassengerStartupFile app.js
 PassengerAppRoot %{DOCUMENT_ROOT}
 
 # Set Node.js version
 PassengerNodejs /usr/bin/node
+
+# Set environment to production
+SetEnv NODE_ENV production
+
+# Disable directory indexes
+Options -Indexes
+
+# Prevent direct access to certain file types
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "\.(json|lock|log)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Allow access to the application
+<Directory "%{DOCUMENT_ROOT}/public">
+    Allow from all
+    Require all granted
+</Directory>
