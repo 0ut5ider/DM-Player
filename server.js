@@ -3,7 +3,6 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const mm = require('music-metadata');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -189,7 +188,8 @@ app.post('/api/projects/:projectId/tracks', upload.array('tracks'), async (req, 
     for (const file of req.files) {
       try {
         // Extract metadata to get duration
-        const metadata = await mm.parseFile(file.path);
+        const { parseFile } = await import('music-metadata');
+        const metadata = await parseFile(file.path);
         const duration = metadata.format.duration || 0;
         
         const trackId = path.parse(file.filename).name; // UUID from filename
