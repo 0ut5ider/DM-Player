@@ -4,6 +4,7 @@ let currentTrack = null;
 let upcomingCuePoints = [];
 let isPlaying = false;
 let isTrackSwitching = false; // Flag to prevent multiple track switches at once
+let isDragging = false;
 
 // DOM Elements
 const projectListView = document.getElementById('project-list-view');
@@ -18,6 +19,7 @@ const currentTimeElement = document.getElementById('current-time');
 const totalTimeElement = document.getElementById('total-time');
 const progressIndicator = document.getElementById('progress-indicator');
 const progressBar = document.getElementById('progress-bar');
+const progressHandle = document.getElementById('progress-handle');
 const playButton = document.getElementById('play-btn');
 const pauseButton = document.getElementById('pause-btn');
 const stopButton = document.getElementById('stop-btn');
@@ -66,6 +68,52 @@ function setupEventListeners() {
   pauseButton.addEventListener('click', pauseAudio);
   stopButton.addEventListener('click', stopAudio);
   progressBar.addEventListener('click', seekAudio);
+  // Scrubber drag events
+  progressHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    isDragging = true;
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging || !audioPlayer.duration) return;
+    const rect = progressBar.getBoundingClientRect();
+    let pos = (e.clientX - rect.left) / rect.width;
+    pos = Math.max(0, Math.min(1, pos));
+    const newTime = pos * audioPlayer.duration;
+    // Cue-point-aware drag
+    if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
+      audioPlayer.currentTime = newTime;
+      const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
+      if (newTime >= sorted[0].time) {
+        isDragging = false;
+        switchToRandomTrack();
+        return;
+      }
+    }
+    progressIndicator.style.width = `${pos * 100}%`;
+    progressHandle.style.left = `${pos * 100}%`;
+    currentTimeElement.textContent = formatTime(newTime);
+  });
+  document.addEventListener('mouseup', (e) => {
+    if (!isDragging || !audioPlayer.duration) return;
+    const rect = progressBar.getBoundingClientRect();
+    let pos = (e.clientX - rect.left) / rect.width;
+    pos = Math.max(0, Math.min(1, pos));
+    const newTime = pos * audioPlayer.duration;
+    audioPlayer.currentTime = newTime;
+    isDragging = false;
+
+    // Cue-point-aware drag end
+    if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
+      const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
+      if (newTime >= sorted[0].time) {
+        switchToRandomTrack();
+        return;
+      }
+    }
+    if (isPlaying) {
+      updateUpcomingCuePoints();
+    }
+  });
   
   // Audio player events
   audioPlayer.addEventListener('timeupdate', updateProgress);
@@ -701,22 +749,32 @@ function stopAudio() {
   currentTimeElement.textContent = '0:00';
 }
 
-// Seek audio to a specific position
-function seekAudio(event) {
-  if (!audioPlayer.duration) return;
-  
-  const rect = progressBar.getBoundingClientRect();
-  const pos = (event.clientX - rect.left) / rect.width;
-  audioPlayer.currentTime = pos * audioPlayer.duration;
-  
-  // Update upcoming cue points after seeking
-  if (isPlaying) {
-    updateUpcomingCuePoints();
-  }
-}
+ // Seek audio to a specific position
+ function seekAudio(event) {
+   if (!audioPlayer.duration) return;
+   
+   const rect = progressBar.getBoundingClientRect();
+   const pos = (event.clientX - rect.left) / rect.width;
+   const newTime = Math.max(0, Math.min(1, pos)) * audioPlayer.duration;
+   audioPlayer.currentTime = newTime;
+   
+   // Cue-point-aware seek
+   if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
+     const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
+     if (newTime >= sorted[0].time) {
+       switchToRandomTrack();
+       return;
+     }
+   }
+   // Update upcoming cue points after seeking
+   if (isPlaying) {
+     updateUpcomingCuePoints();
+   }
+ }
 
 // Update progress bar and time display
 function updateProgress() {
+  if (isDragging) return;
   if (!audioPlayer.duration) return;
   
   const currentTime = audioPlayer.currentTime;
@@ -725,6 +783,7 @@ function updateProgress() {
   // Update progress bar
   const progress = (currentTime / duration) * 100;
   progressIndicator.style.width = `${progress}%`;
+  progressHandle.style.left = `${progress}%`;
   
   // Update time display
   currentTimeElement.textContent = formatTime(currentTime);

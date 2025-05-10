@@ -6,3 +6,5 @@
 - Moved the player controls to the top
 - Placed tracks and cue points side by side
 - modified buttons to add tracks and cue points to + symbols with tool tips
+1.0.5 : Cue-point–aware scrubbing has been implemented.
+- Dragging the circular handle or clicking the progress bar will now seek the audio; if the seek position passes the next cue point, it triggers an immediate random track switch just as during normal playback. Indicator, handle, and time display remain in sync throughout.
