@@ -10,6 +10,7 @@ node_modules/
 # ('<project_id>/audio/*.mp3'). This data is dynamic and specific to an
 # instance of the application, so it should not be version controlled.
 projects/
+dm_player.sqlite
 
 # Log files
 # Standard Node.js debug logs and any other general log files.
@@ -29,3 +30,4 @@ ehthumbs.db
 # are beneficial for all collaborators. User-specific workspace settings
 # should be ignored. You can uncomment and adjust this as needed.
 # .vscode/
+dm_player.sqlite
