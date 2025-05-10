@@ -1,4 +1,5 @@
 // Global state
+const BASE_PATH = '/dmplayer'; // Base path for cPanel deployment
 let currentProject = null;
 let currentTrack = null;
 let upcomingCuePoints = [];
@@ -87,7 +88,7 @@ function setupEventListeners() {
 // Fetch all projects
 async function loadProjects() {
   try {
-    const response = await fetch('/api/projects');
+    const response = await fetch(`${BASE_PATH}/api/projects`);
     if (!response.ok) throw new Error('Failed to load projects');
     
     const projects = await response.json();
@@ -108,7 +109,7 @@ async function createProject(event) {
   if (!name) return;
   
   try {
-    const response = await fetch('/api/projects', {
+    const response = await fetch(`${BASE_PATH}/api/projects`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -141,7 +142,7 @@ async function updateProject(event) {
   if (!name || !projectId) return;
   
   try {
-    const response = await fetch(`/api/projects/${projectId}`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${projectId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -175,7 +176,7 @@ async function deleteProject(projectId) {
   }
   
   try {
-    const response = await fetch(`/api/projects/${projectId}`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${projectId}`, {
       method: 'DELETE'
     });
     
@@ -197,13 +198,13 @@ async function deleteProject(projectId) {
 // Load project details
 async function loadProjectDetails(projectId) {
   try {
-    const response = await fetch(`/api/projects/${projectId}`);
+    const response = await fetch(`${BASE_PATH}/api/projects/${projectId}`);
     if (!response.ok) throw new Error('Failed to load project details');
     
     const projectData = await response.json();
     
     // Find the project in the list to get its name
-    const projectsResponse = await fetch('/api/projects');
+    const projectsResponse = await fetch(`${BASE_PATH}/api/projects`);
     const projects = await projectsResponse.json();
     const project = projects.find(p => p.id === projectId);
     
@@ -240,7 +241,7 @@ async function uploadTracks() {
   }
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/tracks`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${currentProject.id}/tracks`, {
       method: 'POST',
       body: formData
     });
@@ -272,7 +273,7 @@ async function deleteTrack(trackId) {
   }
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/tracks/${trackId}`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${currentProject.id}/tracks/${trackId}`, {
       method: 'DELETE'
     });
     
@@ -307,7 +308,7 @@ async function createCuePoint(event) {
   if (isNaN(time) || time < 0) return;
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${currentProject.id}/cues`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -353,7 +354,7 @@ async function updateCuePoint(event) {
   if (!cueId || isNaN(time) || time < 0) return;
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues/${cueId}`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${currentProject.id}/cues/${cueId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -397,7 +398,7 @@ async function deleteCuePoint(cueId) {
   }
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues/${cueId}`, {
+    const response = await fetch(`${BASE_PATH}/api/projects/${currentProject.id}/cues/${cueId}`, {
       method: 'DELETE'
     });
     
@@ -642,7 +643,7 @@ function playTrack(track) {
   currentTrack = track;
   
   // Update audio source
-  audioPlayer.src = `/projects/${currentProject.id}/audio/${track.id}.mp3`;
+  audioPlayer.src = `${BASE_PATH}/projects/${currentProject.id}/audio/${track.id}.mp3`;
   
   // Update UI
   currentTrackNameElement.textContent = track.originalName;
@@ -662,7 +663,7 @@ function playAudio() {
   if (!currentTrack) {
     const randomIndex = Math.floor(Math.random() * currentProject.tracks.length);
     currentTrack = currentProject.tracks[randomIndex];
-    audioPlayer.src = `/projects/${currentProject.id}/audio/${currentTrack.id}.mp3`;
+    audioPlayer.src = `${BASE_PATH}/projects/${currentProject.id}/audio/${currentTrack.id}.mp3`;
     currentTrackNameElement.textContent = currentTrack.originalName;
   }
   
@@ -817,7 +818,7 @@ function switchToRandomTrack() {
     console.log(`Switching from ${currentTrack?.originalName || 'None'} to track: ${newTrack.originalName} at time ${previousTime.toFixed(2)}s`);
 
     currentTrack = newTrack;
-    audioPlayer.src = `/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
+    audioPlayer.src = `${BASE_PATH}/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
     currentTrackNameElement.textContent = newTrack.originalName;
 
     // Use { once: true } for safety to ensure listeners don't stack up
