@@ -497,4 +497,185 @@ I've updated the application to display the version number "v1.0.7" beneath the 
 I've updated the `showEditCueModal` function in `public/app.js` to ensure that cue point time values are displayed with a maximum of two decimal places when editing. The `cue.time` value is now parsed as a float and then formatted to two decimal places using `toFixed(2)` before being set as the value of the `edit-cue-time-input` element.
 ---
 
+Okay, I understand you want to refactor the application to use SQLite for all persistent data storage instead of JSON files. This is a good move for managing relational data and can offer better performance and data integrity as the application grows.
+
+Here's a plan to achieve this:
+
+__1. Install SQLite Dependency:__
+
+- We'll need to add the `sqlite3` package to your project. I'll add `"sqlite3": "^5.1.7"` (or the latest stable version) to your `package.json` and then you'll need to run `npm install`.
+
+__2. Database Setup and Schema:__
+
+- We'll create a new SQLite database file, for example, `dm_player.sqlite`, in the root of your project.
+
+- We'll define the following table structures:
+
+  - __`projects` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `project.id`
+    - `name` (TEXT, NOT NULL) - Corresponds to `project.name`
+    - `createdAt` (TEXT, NOT NULL) - Corresponds to `project.createdAt`
+
+  - __`tracks` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `track.id`
+    - `projectId` (TEXT, NOT NULL, FOREIGN KEY referencing `projects.id` ON DELETE CASCADE) - Links track to a project
+    - `originalName` (TEXT, NOT NULL) - Corresponds to `track.originalName`
+    - `path` (TEXT, NOT NULL) - Corresponds to `track.path` (e.g., `audio/uuid-track-1.mp3`)
+    - `duration` (REAL, NOT NULL) - Corresponds to `track.duration`
+
+  - __`cue_points` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `cuePoint.id`
+    - `projectId` (TEXT, NOT NULL, FOREIGN KEY referencing `projects.id` ON DELETE CASCADE) - Links cue point to a project
+    - `time` (REAL, NOT NULL) - Corresponds to `cuePoint.time`
+
+- I'll create a helper module (e.g., `database.js`) to manage the database connection and initialize these tables if they don't already exist when the server starts. This module will provide functions for interacting with the database.
+
+__3. Refactor `server.js`:__
+
+- __Remove JSON File Logic:__ All `fs.readFileSync`, `fs.writeFileSync`, `fs.mkdirSync` (for `project_data.json`), and `fs.unlinkSync` calls related to `projects.json` and `project_data.json` will be removed. The initialization of `projects.json` will also be removed.
+
+- __Integrate SQLite:__
+
+  - Import the `sqlite3` library and our new `database.js` module.
+
+  - Modify all API endpoint handlers to use SQLite queries instead of file system operations for data manipulation:
+
+    - __Projects API (`/api/projects`, `/api/projects/:projectId`):__
+
+      - `GET /api/projects`: Fetch all projects from the `projects` table.
+      - `POST /api/projects`: Insert a new project into the `projects` table. The creation of the project's physical directory (`projects/<project_id>/audio/`) will still occur, but `project_data.json` will not be created.
+      - `GET /api/projects/:projectId`: Fetch project details by querying the `projects` table, and its associated tracks and cue points from their respective tables.
+      - `PUT /api/projects/:projectId`: Update project name in the `projects` table.
+      - `DELETE /api/projects/:projectId`: Delete the project from the `projects` table. The `ON DELETE CASCADE` constraint will automatically delete associated tracks and cue points. The physical project directory (`projects/<project_id>/`) will still need to be removed using `fs.rmSync`.
+
+    - __Tracks API (`/api/projects/:projectId/tracks`, `/api/projects/:projectId/tracks/:trackId`):__
+
+      - `POST /api/projects/:projectId/tracks`: After `multer` saves the MP3 file, its metadata (ID, project ID, original name, path, duration) will be inserted into the `tracks` table.
+      - `DELETE /api/projects/:projectId/tracks/:trackId`: Delete the track record from the `tracks` table and then delete the corresponding MP3 file from the file system.
+
+    - __Cue Points API (`/api/projects/:projectId/cues`, `/api/projects/:projectId/cues/:cueId`):__
+
+      - `GET /api/projects/:projectId/cues`: Fetch all cue points for a given project from the `cue_points` table, ordered by time.
+      - `POST /api/projects/:projectId/cues`: Insert a new cue point into the `cue_points` table.
+      - `PUT /api/projects/:projectId/cues/:cueId`: Update the cue point's time in the `cue_points` table.
+      - `DELETE /api/projects/:projectId/cues/:cueId`: Delete the cue point from the `cue_points` table.
+
+__4. File Structure Impact:__
+
+- The `projects/projects.json` file will no longer be used or created.
+- The `projects/<project_id>/project_data.json` files will no longer be used or created.
+- MP3 files will continue to be stored in `projects/<project_id>/audio/`.
+- A new `dm_player.sqlite` (or similar name) file will appear in your project root. This file should be added to your `.gitignore` if you don't want to commit the database itself (often the case for development databases).
+
+__5. Data Migration (Consideration):__
+
+- This plan focuses on changing the storage mechanism. If you have existing data in JSON files that you need to migrate to the new SQLite database, that would be an additional step, potentially involving a one-time migration script. For now, I'll assume we're starting fresh with SQLite storage. Please let me know if data migration is a requirement.
+
+__Diagram of New Data Flow (Conceptual):__
+
+graph TD UserInterface[Frontend UI] -->|API Calls| ExpressAPI[Express API (server.js)] ExpressAPI -->|CRUD Operations| SQLiteDB[SQLite Database (dm_player.sqlite)] ExpressAPI -->|File Ops| FileSystem[File System (MP3s in projects/PROJECT_ID/audio)] subgraph Database Schema direction LR ProjectsTable[projects Table\n(id, name, createdAt)] TracksTable[tracks Table\n(id, projectId, originalName, path, duration)] CuePointsTable[cue_points Table\n(id, projectId, time)] ProjectsTable --o{ TracksTable ProjectsTable --o{ CuePointsTable end SQLiteDB -.-> ProjectsTable SQLiteDB -.-> TracksTable SQLiteDB -.-> CuePointsTable
+
+__Next Steps:__
+
+1. Please review this plan. Does it cover all the necessary changes for moving to SQLite?
+2. Do you want to proceed with this plan? If so, please ask me to "toggle to Act mode", and I will start by asking you to update `package.json` and run `npm install`, then I'll create the `database.js` module and begin refactoring `server.js`.
+3. Regarding data migration: Do you need to migrate existing JSON data, or is starting with an empty SQLite database acceptable?
+
+Let me know your thoughts!
+
+Okay, I understand you want to refactor the application to use SQLite for all persistent data storage instead of JSON files. This is a good move for managing relational data and can offer better performance and data integrity as the application grows.
+
+Here's a plan to achieve this:
+
+__1. Install SQLite Dependency:__
+
+- We'll need to add the `sqlite3` package to your project. I'll add `"sqlite3": "^5.1.7"` (or the latest stable version) to your `package.json` and then you'll need to run `npm install`.
+
+__2. Database Setup and Schema:__
+
+- We'll create a new SQLite database file, for example, `dm_player.sqlite`, in the root of your project.
+
+- We'll define the following table structures:
+
+  - __`projects` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `project.id`
+    - `name` (TEXT, NOT NULL) - Corresponds to `project.name`
+    - `createdAt` (TEXT, NOT NULL) - Corresponds to `project.createdAt`
+
+  - __`tracks` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `track.id`
+    - `projectId` (TEXT, NOT NULL, FOREIGN KEY referencing `projects.id` ON DELETE CASCADE) - Links track to a project
+    - `originalName` (TEXT, NOT NULL) - Corresponds to `track.originalName`
+    - `path` (TEXT, NOT NULL) - Corresponds to `track.path` (e.g., `audio/uuid-track-1.mp3`)
+    - `duration` (REAL, NOT NULL) - Corresponds to `track.duration`
+
+  - __`cue_points` Table:__
+
+    - `id` (TEXT, PRIMARY KEY) - Corresponds to `cuePoint.id`
+    - `projectId` (TEXT, NOT NULL, FOREIGN KEY referencing `projects.id` ON DELETE CASCADE) - Links cue point to a project
+    - `time` (REAL, NOT NULL) - Corresponds to `cuePoint.time`
+
+- I'll create a helper module (e.g., `database.js`) to manage the database connection and initialize these tables if they don't already exist when the server starts. This module will provide functions for interacting with the database.
+
+__3. Refactor `server.js`:__
+
+- __Remove JSON File Logic:__ All `fs.readFileSync`, `fs.writeFileSync`, `fs.mkdirSync` (for `project_data.json`), and `fs.unlinkSync` calls related to `projects.json` and `project_data.json` will be removed. The initialization of `projects.json` will also be removed.
+
+- __Integrate SQLite:__
+
+  - Import the `sqlite3` library and our new `database.js` module.
+
+  - Modify all API endpoint handlers to use SQLite queries instead of file system operations for data manipulation:
+
+    - __Projects API (`/api/projects`, `/api/projects/:projectId`):__
+
+      - `GET /api/projects`: Fetch all projects from the `projects` table.
+      - `POST /api/projects`: Insert a new project into the `projects` table. The creation of the project's physical directory (`projects/<project_id>/audio/`) will still occur, but `project_data.json` will not be created.
+      - `GET /api/projects/:projectId`: Fetch project details by querying the `projects` table, and its associated tracks and cue points from their respective tables.
+      - `PUT /api/projects/:projectId`: Update project name in the `projects` table.
+      - `DELETE /api/projects/:projectId`: Delete the project from the `projects` table. The `ON DELETE CASCADE` constraint will automatically delete associated tracks and cue points. The physical project directory (`projects/<project_id>/`) will still need to be removed using `fs.rmSync`.
+
+    - __Tracks API (`/api/projects/:projectId/tracks`, `/api/projects/:projectId/tracks/:trackId`):__
+
+      - `POST /api/projects/:projectId/tracks`: After `multer` saves the MP3 file, its metadata (ID, project ID, original name, path, duration) will be inserted into the `tracks` table.
+      - `DELETE /api/projects/:projectId/tracks/:trackId`: Delete the track record from the `tracks` table and then delete the corresponding MP3 file from the file system.
+
+    - __Cue Points API (`/api/projects/:projectId/cues`, `/api/projects/:projectId/cues/:cueId`):__
+
+      - `GET /api/projects/:projectId/cues`: Fetch all cue points for a given project from the `cue_points` table, ordered by time.
+      - `POST /api/projects/:projectId/cues`: Insert a new cue point into the `cue_points` table.
+      - `PUT /api/projects/:projectId/cues/:cueId`: Update the cue point's time in the `cue_points` table.
+      - `DELETE /api/projects/:projectId/cues/:cueId`: Delete the cue point from the `cue_points` table.
+
+__4. File Structure Impact:__
+
+- The `projects/projects.json` file will no longer be used or created.
+- The `projects/<project_id>/project_data.json` files will no longer be used or created.
+- MP3 files will continue to be stored in `projects/<project_id>/audio/`.
+- A new `dm_player.sqlite` (or similar name) file will appear in your project root. This file should be added to your `.gitignore` if you don't want to commit the database itself (often the case for development databases).
+
+__5. Data Migration (Consideration):__
+
+- This plan focuses on changing the storage mechanism. If you have existing data in JSON files that you need to migrate to the new SQLite database, that would be an additional step, potentially involving a one-time migration script. For now, I'll assume we're starting fresh with SQLite storage. Please let me know if data migration is a requirement.
+
+__Diagram of New Data Flow (Conceptual):__
+
+graph TD UserInterface[Frontend UI] -->|API Calls| ExpressAPI[Express API (server.js)] ExpressAPI -->|CRUD Operations| SQLiteDB[SQLite Database (dm_player.sqlite)] ExpressAPI -->|File Ops| FileSystem[File System (MP3s in projects/PROJECT_ID/audio)] subgraph Database Schema direction LR ProjectsTable[projects Table\n(id, name, createdAt)] TracksTable[tracks Table\n(id, projectId, originalName, path, duration)] CuePointsTable[cue_points Table\n(id, projectId, time)] ProjectsTable --o{ TracksTable ProjectsTable --o{ CuePointsTable end SQLiteDB -.-> ProjectsTable SQLiteDB -.-> TracksTable SQLiteDB -.-> CuePointsTable
+
+---
+
+The application has been successfully refactored to use SQLite for persistent data storage instead of JSON files.
+
+Key changes include:
+
+- Added the `sqlite3` dependency.
+- Created `database.js` to manage the SQLite connection and schema (tables for `projects`, `tracks`, and `cue_points`).
+- Updated `server.js` to perform all CRUD operations against the SQLite database. JSON file reading/writing for data has been removed.
+- MP3 files will continue to be stored in the `projects/[project_id]/audio/` directories.
+- A new `dm_player.sqlite` file will be created in the project root to store all application data.
 

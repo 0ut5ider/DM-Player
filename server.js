@@ -1,8 +1,9 @@
 const express = require('express');
 const multer = require('multer');
-const fs = require('fs');
+const fs = require('fs'); // Still needed for file system operations (audio files, project dirs)
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const db = require('./database'); // Import the database connection
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -11,15 +12,9 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json());
 app.use(express.static('public'));
 
-// Ensure projects directory exists
+// Ensure projects directory exists (still needed for storing project-specific audio folders)
 if (!fs.existsSync('./projects')) {
   fs.mkdirSync('./projects', { recursive: true });
-}
-
-// Initialize projects.json if it doesn't exist
-const projectsFilePath = path.join(__dirname, 'projects', 'projects.json');
-if (!fs.existsSync(projectsFilePath)) {
-  fs.writeFileSync(projectsFilePath, JSON.stringify([], null, 2));
 }
 
 // Configure multer for file uploads
@@ -57,315 +52,334 @@ const upload = multer({
 
 // Get all projects
 app.get('/api/projects', (req, res) => {
-  try {
-    const projects = JSON.parse(fs.readFileSync(projectsFilePath, 'utf8'));
-    res.json(projects);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve projects' });
-  }
+  db.all("SELECT * FROM projects ORDER BY createdAt DESC", [], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: 'Failed to retrieve projects', details: err.message });
+      return;
+    }
+    res.json(rows);
+  });
 });
 
 // Create a new project
 app.post('/api/projects', (req, res) => {
-  try {
-    const { name } = req.body;
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Project name is required' });
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  const newProject = {
+    id: uuidv4(),
+    name,
+    createdAt: new Date().toISOString()
+  };
+
+  const sql = `INSERT INTO projects (id, name, createdAt) VALUES (?, ?, ?)`;
+  db.run(sql, [newProject.id, newProject.name, newProject.createdAt], function(err) {
+    if (err) {
+      res.status(500).json({ error: 'Failed to create project', details: err.message });
+      return;
     }
-    
-    const projects = JSON.parse(fs.readFileSync(projectsFilePath, 'utf8'));
-    
-    const newProject = {
-      id: uuidv4(),
-      name,
-      createdAt: new Date().toISOString()
-    };
-    
-    projects.push(newProject);
-    fs.writeFileSync(projectsFilePath, JSON.stringify(projects, null, 2));
-    
-    // Create project directory and project_data.json
+    // Create project directory for audio files (project_data.json is no longer needed)
     const projectDir = path.join(__dirname, 'projects', newProject.id);
-    fs.mkdirSync(projectDir, { recursive: true });
-    
-    const projectDataPath = path.join(projectDir, 'project_data.json');
-    fs.writeFileSync(projectDataPath, JSON.stringify({
-      tracks: [],
-      cuePoints: []
-    }, null, 2));
-    
+    fs.mkdirSync(projectDir, { recursive: true }); // Audio subfolder will be created by multer
+
     res.status(201).json(newProject);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create project' });
-  }
+  });
 });
 
-// Get a specific project
+// Get a specific project (details including tracks and cues)
 app.get('/api/projects/:projectId', (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
+  const { projectId } = req.params;
+  const projectSql = "SELECT * FROM projects WHERE id = ?";
+  const tracksSql = "SELECT * FROM tracks WHERE projectId = ?";
+  const cuesSql = "SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC";
+
+  db.get(projectSql, [projectId], (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve project details', details: err.message });
+    }
+    if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    res.json(projectData);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve project' });
-  }
+
+    db.all(tracksSql, [projectId], (err, tracks) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve tracks', details: err.message });
+      }
+      db.all(cuesSql, [projectId], (err, cuePoints) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to retrieve cue points', details: err.message });
+        }
+        res.json({ ...project, tracks: tracks || [], cuePoints: cuePoints || [] });
+      });
+    });
+  });
 });
 
-// Update a project
+// Update a project name
 app.put('/api/projects/:projectId', (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { name } = req.body;
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Project name is required' });
+  const { projectId } = req.params;
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  const sql = `UPDATE projects SET name = ? WHERE id = ?`;
+  db.run(sql, [name, projectId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update project', details: err.message });
     }
-    
-    const projects = JSON.parse(fs.readFileSync(projectsFilePath, 'utf8'));
-    const projectIndex = projects.findIndex(p => p.id === projectId);
-    
-    if (projectIndex === -1) {
+    if (this.changes === 0) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    
-    projects[projectIndex].name = name;
-    fs.writeFileSync(projectsFilePath, JSON.stringify(projects, null, 2));
-    
-    res.json(projects[projectIndex]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update project' });
-  }
+    // Fetch the updated project to return it
+    db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve updated project', details: err.message });
+        }
+        res.json(row);
+    });
+  });
 });
 
 // Delete a project
 app.delete('/api/projects/:projectId', (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const projects = JSON.parse(fs.readFileSync(projectsFilePath, 'utf8'));
-    const projectIndex = projects.findIndex(p => p.id === projectId);
-    
-    if (projectIndex === -1) {
+  const { projectId } = req.params;
+  const sql = "DELETE FROM projects WHERE id = ?";
+
+  // First, get project details to return, and to know which folder to delete
+   db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, projectToDelete) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error finding project to delete', details: err.message });
+    }
+    if (!projectToDelete) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    
-    // Remove from projects array
-    const deletedProject = projects.splice(projectIndex, 1)[0];
-    fs.writeFileSync(projectsFilePath, JSON.stringify(projects, null, 2));
-    
-    // Delete project directory
-    const projectDir = path.join(__dirname, 'projects', projectId);
-    if (fs.existsSync(projectDir)) {
-      fs.rmSync(projectDir, { recursive: true, force: true });
-    }
-    
-    res.json(deletedProject);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete project' });
-  }
+
+    db.run(sql, [projectId], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to delete project from database', details: err.message });
+      }
+      if (this.changes === 0) {
+        // Should have been caught by the get above, but as a safeguard
+        return res.status(404).json({ error: 'Project not found for deletion' });
+      }
+
+      // Delete project directory (ON DELETE CASCADE handles tracks and cues in DB)
+      const projectDir = path.join(__dirname, 'projects', projectId);
+      if (fs.existsSync(projectDir)) {
+        fs.rmSync(projectDir, { recursive: true, force: true });
+      }
+      res.json(projectToDelete); // Return the project that was deleted
+    });
+  });
 });
 
 // Upload tracks
 app.post('/api/projects/:projectId/tracks', upload.array('tracks'), async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
+  const { projectId } = req.params;
+
+  // Check if project exists
+  db.get("SELECT id FROM projects WHERE id = ?", [projectId], async (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking project existence', details: err.message });
+    }
+    if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
+
     const uploadedTracks = [];
-    
-    // Process each uploaded file
+    const insertSql = `INSERT INTO tracks (id, projectId, originalName, path, duration) VALUES (?, ?, ?, ?, ?)`;
+
     for (const file of req.files) {
       try {
-        // Extract metadata to get duration
         const { parseFile } = await import('music-metadata');
         const metadata = await parseFile(file.path);
         const duration = metadata.format.duration || 0;
-        
         const trackId = path.parse(file.filename).name; // UUID from filename
+
         const track = {
           id: trackId,
+          projectId,
           originalName: file.originalname,
-          path: `audio/${file.filename}`,
+          path: `audio/${file.filename}`, // Relative path within the project's audio folder
           duration
         };
         
-        projectData.tracks.push(track);
-        uploadedTracks.push(track);
+        await new Promise((resolve, reject) => {
+          db.run(insertSql, [track.id, track.projectId, track.originalName, track.path, track.duration], function(err) {
+            if (err) {
+              console.error(`Error inserting track ${file.originalname} into DB:`, err);
+              reject(err);
+            } else {
+              uploadedTracks.push(track);
+              resolve();
+            }
+          });
+        });
       } catch (err) {
         console.error(`Error processing file ${file.originalname}:`, err);
+        // Optionally, delete the file if DB insert fails or metadata fails
+        // fs.unlinkSync(file.path); 
       }
     }
-    
-    // Save updated project data
-    fs.writeFileSync(projectDataPath, JSON.stringify(projectData, null, 2));
-    
     res.status(201).json(uploadedTracks);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to upload tracks' });
-  }
+  });
 });
 
 // Delete a track
 app.delete('/api/projects/:projectId/tracks/:trackId', (req, res) => {
-  try {
-    const { projectId, trackId } = req.params;
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
-      return res.status(404).json({ error: 'Project not found' });
+  const { projectId, trackId } = req.params;
+  const selectSql = "SELECT * FROM tracks WHERE id = ? AND projectId = ?";
+  const deleteSql = "DELETE FROM tracks WHERE id = ? AND projectId = ?";
+
+  db.get(selectSql, [trackId, projectId], (err, track) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error finding track', details: err.message });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    const trackIndex = projectData.tracks.findIndex(t => t.id === trackId);
-    
-    if (trackIndex === -1) {
-      return res.status(404).json({ error: 'Track not found' });
+    if (!track) {
+      return res.status(404).json({ error: 'Track not found in this project' });
     }
-    
-    // Get track info before removing
-    const track = projectData.tracks[trackIndex];
-    
-    // Remove from tracks array
-    projectData.tracks.splice(trackIndex, 1);
-    fs.writeFileSync(projectDataPath, JSON.stringify(projectData, null, 2));
-    
-    // Delete track file
-    const trackPath = path.join(__dirname, 'projects', projectId, track.path);
-    if (fs.existsSync(trackPath)) {
-      fs.unlinkSync(trackPath);
-    }
-    
-    res.json(track);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete track' });
-  }
+
+    db.run(deleteSql, [trackId, projectId], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to delete track from database', details: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Track not found for deletion' });
+      }
+
+      // Delete track file
+      const trackPath = path.join(__dirname, 'projects', projectId, track.path);
+      if (fs.existsSync(trackPath)) {
+        fs.unlinkSync(trackPath);
+      }
+      res.json(track); // Return the track that was deleted
+    });
+  });
 });
 
-// Get all cue points
+// Get all cue points for a project
 app.get('/api/projects/:projectId/cues', (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
-      return res.status(404).json({ error: 'Project not found' });
+  const { projectId } = req.params;
+  const sql = "SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC";
+
+  db.all(sql, [projectId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve cue points', details: err.message });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    res.json(projectData.cuePoints);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve cue points' });
-  }
+    res.json(rows);
+  });
 });
 
 // Create a new cue point
 app.post('/api/projects/:projectId/cues', (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { time } = req.body;
-    
-    if (time === undefined || time === null) {
-      return res.status(400).json({ error: 'Cue point time is required' });
+  const { projectId } = req.params;
+  const { time } = req.body;
+
+  if (time === undefined || time === null) {
+    return res.status(400).json({ error: 'Cue point time is required' });
+  }
+  
+  // Check if project exists
+  db.get("SELECT id FROM projects WHERE id = ?", [projectId], (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking project existence', details: err.message });
     }
-    
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
-      return res.status(404).json({ error: 'Project not found' });
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found, cannot add cue point' });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    
+
     const newCuePoint = {
       id: uuidv4(),
+      projectId,
       time: parseFloat(time)
     };
-    
-    projectData.cuePoints.push(newCuePoint);
-    
-    // Sort cue points by time
-    projectData.cuePoints.sort((a, b) => a.time - b.time);
-    
-    fs.writeFileSync(projectDataPath, JSON.stringify(projectData, null, 2));
-    
-    res.status(201).json(newCuePoint);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create cue point' });
-  }
+
+    const insertSql = `INSERT INTO cue_points (id, projectId, time) VALUES (?, ?, ?)`;
+    db.run(insertSql, [newCuePoint.id, newCuePoint.projectId, newCuePoint.time], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to create cue point', details: err.message });
+      }
+      // Return the full cue point object including the generated ID
+      db.get("SELECT * FROM cue_points WHERE id = ?", [newCuePoint.id], (err, createdCue) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to retrieve created cue point', details: err.message });
+        }
+         // Re-fetch all cue points to return them sorted
+        db.all("SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC", [projectId], (err, allCues) => {
+            if (err) {
+                 return res.status(500).json({ error: 'Failed to retrieve sorted cue points', details: err.message });
+            }
+            // Find the newly created cue in the sorted list to return it, or just return the one we have if an error occurs
+            const newlyInsertedCue = allCues.find(c => c.id === newCuePoint.id) || createdCue;
+            res.status(201).json(newlyInsertedCue);
+        });
+      });
+    });
+  });
 });
 
 // Update a cue point
 app.put('/api/projects/:projectId/cues/:cueId', (req, res) => {
-  try {
-    const { projectId, cueId } = req.params;
-    const { time } = req.body;
-    
-    if (time === undefined || time === null) {
-      return res.status(400).json({ error: 'Cue point time is required' });
-    }
-    
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    const cueIndex = projectData.cuePoints.findIndex(c => c.id === cueId);
-    
-    if (cueIndex === -1) {
-      return res.status(404).json({ error: 'Cue point not found' });
-    }
-    
-    projectData.cuePoints[cueIndex].time = parseFloat(time);
-    
-    // Sort cue points by time
-    projectData.cuePoints.sort((a, b) => a.time - b.time);
-    
-    fs.writeFileSync(projectDataPath, JSON.stringify(projectData, null, 2));
-    
-    res.json(projectData.cuePoints[cueIndex]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update cue point' });
+  const { projectId, cueId } = req.params;
+  const { time } = req.body;
+
+  if (time === undefined || time === null) {
+    return res.status(400).json({ error: 'Cue point time is required' });
   }
+
+  const sql = `UPDATE cue_points SET time = ? WHERE id = ? AND projectId = ?`;
+  db.run(sql, [parseFloat(time), cueId, projectId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update cue point', details: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Cue point not found or not part of this project' });
+    }
+    // Fetch the updated cue point to return it
+    db.get("SELECT * FROM cue_points WHERE id = ? AND projectId = ?", [cueId, projectId], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve updated cue point', details: err.message });
+        }
+        // Re-fetch all cue points to return them sorted, and then find the updated one
+        db.all("SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC", [projectId], (err, allCues) => {
+            if (err) {
+                 return res.status(500).json({ error: 'Failed to retrieve sorted cue points', details: err.message });
+            }
+            const updatedCue = allCues.find(c => c.id === cueId) || row; // Fallback to 'row' if not found in sorted
+            res.json(updatedCue);
+        });
+    });
+  });
 });
 
 // Delete a cue point
 app.delete('/api/projects/:projectId/cues/:cueId', (req, res) => {
-  try {
-    const { projectId, cueId } = req.params;
-    const projectDataPath = path.join(__dirname, 'projects', projectId, 'project_data.json');
-    
-    if (!fs.existsSync(projectDataPath)) {
-      return res.status(404).json({ error: 'Project not found' });
+  const { projectId, cueId } = req.params;
+  const selectSql = "SELECT * FROM cue_points WHERE id = ? AND projectId = ?";
+  const deleteSql = "DELETE FROM cue_points WHERE id = ? AND projectId = ?";
+
+  db.get(selectSql, [cueId, projectId], (err, cue) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error finding cue point', details: err.message });
     }
-    
-    const projectData = JSON.parse(fs.readFileSync(projectDataPath, 'utf8'));
-    const cueIndex = projectData.cuePoints.findIndex(c => c.id === cueId);
-    
-    if (cueIndex === -1) {
-      return res.status(404).json({ error: 'Cue point not found' });
+    if (!cue) {
+      return res.status(404).json({ error: 'Cue point not found in this project' });
     }
-    
-    // Remove from cue points array
-    const deletedCue = projectData.cuePoints.splice(cueIndex, 1)[0];
-    fs.writeFileSync(projectDataPath, JSON.stringify(projectData, null, 2));
-    
-    res.json(deletedCue);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete cue point' });
-  }
+
+    db.run(deleteSql, [cueId, projectId], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to delete cue point from database', details: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Cue point not found for deletion' });
+      }
+      res.json(cue); // Return the cue point that was deleted
+    });
+  });
 });
 
 // Serve audio files

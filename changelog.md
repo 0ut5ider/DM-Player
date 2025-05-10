@@ -11,3 +11,4 @@
 1.0.6 : Added a new cue‐point timeline above the main progress bar, and added dots indicating various cue points.
 1.0.7 : Updated the application to display the version number
 1.0.8 : Display 2 decimal points in cue point editors
+1.0.9 : Switched from json files to SQLite database for storing persistant data 

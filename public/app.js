@@ -1,5 +1,5 @@
 // Global state
-const appVersion = "1.0.7";
+const appVersion = "1.0.9";
 let currentProject = null;
 let cueColors = {};
 let draggingCueId = null;
