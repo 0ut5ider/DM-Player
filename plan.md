@@ -453,3 +453,41 @@ __5. Frontend (HTML/CSS/JS in `public/`)__
 __6. High-Level Architecture Diagram__
 
 graph TD User\[User] --> Browser\[Browser (HTML/CSS/JS)]; Browser --> API{Backend API (Node.js/Express)}; API --> JSON\[JSON Files (projects.json, project\_data.json)]; API --> FS\[File System (MP3s in project folders)]; Browser --> AudioPlayer\[HTML5 Audio Element]; AudioPlayer -- timeupdate --> Browser; Browser -- controls --> AudioPlayer; Browser -- serves --> User; API -- serves audio --> AudioPlayer; subgraph Frontend (public/) Browser AudioPlayer end subgraph Backend (server.js) API end subgraph Storage (projects/) JSON FS end
+
+
+------
+# Additions since the initial plan
+
+server.js has been updated to default to port 3001 and bind to 0.0.0.0, making the app accessible on any LAN IP as well as localhost.
+
+---
+
+Player controls have been moved to the top of the project detail view. The Play and Stop buttons have been enlarged. The Tracks and Cue Points panels are now laid out side-by-side in a 75%/25% flex container.
+
+---
+Added a 20px top margin to the tracks/cues container so the “Add Track” and “Add Cue Point” buttons sit lower, and expanded the pause button in the `.control-buttons` selector to 60×60px (matching play/stop).
+
+---
+Buttons for adding tracks and cue points now display only a “+” icon and include native browser tooltips (“Add Track” and “Add Cue Point”) on hover. The updates have been applied to public/index.html.
+
+
+---
+A draggable scrubber handle has been added to the player’s progress bar. As audio plays, the handle moves in sync with the blue fill, updating the time display. You can click anywhere on the bar to seek, or click and drag the circular handle to scrub forward and backward through the track.
+---
+Cue-point–aware scrubbing has been implemented. Dragging the circular handle or clicking the progress bar will now seek the audio; if the seek position passes the next cue point, it triggers an immediate random track switch just as during normal playback. Indicator, handle, and time display remain in sync throughout.
+
+---
+Added a new cue‐point timeline above the main progress bar, styled via CSS, and implemented in JavaScript:
+
+- Cue timeline DOM elements inserted in public/index.html.
+- CSS rules added in public/style.css for `#cue-timeline`, playback indicator, and draggable cue‐point dots.
+- In public/app.js: • Initialized `cueTimeline`, `cuePlaybackIndicator`, and `cuePointsContainer` references.\
+  • On `loadedmetadata` and `timeupdate`, update both main and cue‐playback bars.\
+  • Random colors assigned per cue ID and displayed in both timeline dots and cue‐point list.\
+  • Draggable cue‐point dots update underlying cue time, sync list and timeline, and persist changes via API calls.
+
+--
+
+Adjusted cue‐timeline initialization: `updateCueTimeline` now runs on initial render with track‐duration fallback, and is invoked in `renderCuePoints`. Cue‐point dots will appear immediately upon entering a project, before playback starts.
+--
+The cue point color dots in the list are now generated immediately when `renderCuePoints` is called. Additionally, the cue timeline dragging logic now uses a fallback to the first track's duration if `audioPlayer.duration` is not yet available, ensuring correct time calculation even before playback starts.

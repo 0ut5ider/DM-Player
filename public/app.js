@@ -1,5 +1,7 @@
 // Global state
 let currentProject = null;
+let cueColors = {};
+let draggingCueId = null;
 let currentTrack = null;
 let upcomingCuePoints = [];
 let isPlaying = false;
@@ -25,6 +27,9 @@ const pauseButton = document.getElementById('pause-btn');
 const stopButton = document.getElementById('stop-btn');
 const currentTrackNameElement = document.getElementById('current-track-name');
 const trackUploadInput = document.getElementById('track-upload-input');
+const cueTimeline = document.getElementById('cue-timeline');
+const cuePlaybackIndicator = document.getElementById('cue-playback-indicator');
+const cuePointsContainer = document.getElementById('cue-points-container');
 
 // Modal Elements
 const overlay = document.getElementById('overlay');
@@ -120,6 +125,7 @@ function setupEventListeners() {
   audioPlayer.addEventListener('ended', handleTrackEnd);
   audioPlayer.addEventListener('loadedmetadata', () => {
     updateTotalTime();
+    updateCueTimeline();
   });
   
   // Modal close buttons
@@ -587,12 +593,14 @@ function renderCuePoints(cuePoints) {
   
   // Create cue point items
   cuePoints.forEach(cue => {
+    if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
     const cueItem = document.createElement('div');
     cueItem.className = 'cue-item';
     
     const formattedTime = formatTime(cue.time);
     
     cueItem.innerHTML = `
+      <span class="cue-color" style="background-color: ${cueColors[cue.id]}"></span>
       <div class="cue-time">${formattedTime}</div>
       <div class="cue-actions">
         <button class="edit-btn" title="Edit Cue Point"><i class="fas fa-edit"></i></button>
@@ -612,6 +620,7 @@ function renderCuePoints(cuePoints) {
     
     cuesContainer.appendChild(cueItem);
   });
+  updateCueTimeline();
 }
 
 // Show project list view
@@ -769,6 +778,7 @@ function stopAudio() {
    // Update upcoming cue points after seeking
    if (isPlaying) {
      updateUpcomingCuePoints();
+     updateCueTimeline();
    }
  }
 
@@ -784,6 +794,8 @@ function updateProgress() {
   const progress = (currentTime / duration) * 100;
   progressIndicator.style.width = `${progress}%`;
   progressHandle.style.left = `${progress}%`;
+  // Update cue playback indicator
+  cuePlaybackIndicator.style.width = `${progress}%`;
   
   // Update time display
   currentTimeElement.textContent = formatTime(currentTime);
@@ -969,3 +981,67 @@ function escapeHtml(unsafe) {
 function showError(message) {
   alert(message);
 }
+
+// Generate a random hex color
+function getRandomColor() {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+}
+
+// Update the cue point timeline display
+function updateCueTimeline() {
+  if (!currentProject) {
+    cuePointsContainer.innerHTML = '';
+    cuePlaybackIndicator.style.width = '0%';
+    return;
+  }
+  let duration = audioPlayer.duration;
+  if (!duration && currentProject.tracks && currentProject.tracks.length) {
+    duration = currentProject.tracks[0].duration;
+  }
+  if (!duration) {
+    cuePointsContainer.innerHTML = '';
+    cuePlaybackIndicator.style.width = '0%';
+    return;
+  }
+  cuePointsContainer.innerHTML = '';
+  currentProject.cuePoints.forEach(cue => {
+    if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
+    const dot = document.createElement('div');
+    dot.className = 'cue-point';
+    dot.style.left = (cue.time / duration * 100) + '%';
+    dot.style.backgroundColor = cueColors[cue.id];
+    dot.addEventListener('mousedown', (e) => {
+      draggingCueId = cue.id;
+      e.preventDefault();
+    });
+    cuePointsContainer.appendChild(dot);
+  });
+  const progress = (audioPlayer.currentTime / duration) * 100;
+  cuePlaybackIndicator.style.width = progress + '%';
+}
+
+// Global mouse events for dragging cue points
+document.addEventListener('mousemove', (e) => {
+  if (!draggingCueId) return;
+  const rect = cueTimeline.getBoundingClientRect();
+  let pos = (e.clientX - rect.left) / rect.width;
+  pos = Math.max(0, Math.min(1, pos));
+  const duration = audioPlayer.duration || (currentProject && currentProject.tracks && currentProject.tracks.length > 0 ? currentProject.tracks[0].duration : 0);
+  if (!duration) return; // If no duration, can't calculate newTime
+  const newTime = pos * duration;
+  const cue = currentProject.cuePoints.find(c => c.id === draggingCueId);
+  if (cue) cue.time = newTime;
+  updateCueTimeline();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!draggingCueId) return;
+  const id = draggingCueId;
+  draggingCueId = null;
+  fetch(`/api/projects/${currentProject.id}/cues/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ time: currentProject.cuePoints.find(c => c.id === id).time })
+  }).catch(err => console.error('Cue drag update failed', err));
+  renderCuePoints(currentProject.cuePoints);
+});

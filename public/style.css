@@ -448,6 +448,61 @@ header h1 {
   font-size: 1.2rem;
 }
 
+/* Cue Point Timeline */
+.cue-timeline-container {
+  margin-bottom: 15px;
+}
+
+#cue-timeline {
+  position: relative;
+  height: 6px;
+  background-color: var(--border-color);
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+
+#cue-playback-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: var(--primary-color);
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.1s;
+}
+
+#cue-points-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cue-point {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.cue-item .cue-color {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-radius: 50%;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-container {
