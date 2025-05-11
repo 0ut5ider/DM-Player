@@ -1,5 +1,5 @@
 // Global state
-const appVersion = "1.0.9";
+const appVersion = "1.0.11"; // Will be updated later if needed
 let currentProject = null;
 let cueColors = {};
 let draggingCueId = null;
@@ -9,14 +9,40 @@ let isPlaying = false;
 let isTrackSwitching = false; // Flag to prevent multiple track switches at once
 let isDragging = false;
 
+// Auth state
+let currentUser = null; // { id, artistName, email }
+let currentView = 'login'; // Possible views: 'login', 'register', 'gallery', 'my-projects', 'project-detail'
+
 // DOM Elements
-const projectListView = document.getElementById('project-list-view');
+// Auth & Main Views
+const loginView = document.getElementById('login-view');
+const registerView = document.getElementById('register-view');
+const galleryView = document.getElementById('gallery-view');
+const myProjectsView = document.getElementById('my-projects-view');
 const projectDetailView = document.getElementById('project-detail-view');
-const projectsContainer = document.getElementById('projects-container');
+
+// Navigation
+const authNavigation = document.getElementById('auth-navigation');
+const galleryNavBtn = document.getElementById('gallery-nav-btn');
+const myProjectsNavBtn = document.getElementById('my-projects-nav-btn');
+const backButton = document.getElementById('back-button'); // Existing, will be adapted
+
+// Forms & Links
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+const showRegisterLink = document.getElementById('show-register-link');
+const showLoginLink = document.getElementById('show-login-link');
+
+// Project Containers (My Projects and Gallery)
+const myProjectsContainer = document.getElementById('my-projects-container');
+const galleryProjectsContainer = document.getElementById('gallery-projects-container');
+
+// Existing DOM Elements (Project Detail, Player, etc.)
+const globalPlayerControls = document.getElementById('global-player-controls'); // New global player
 const tracksContainer = document.getElementById('tracks-container');
 const cuesContainer = document.getElementById('cues-container');
-const backButton = document.getElementById('back-button');
-const projectNameElement = document.getElementById('project-name');
+// backButton is already defined above
+const projectNameElement = document.getElementById('project-name'); // This is in project-detail-view
 const audioPlayer = document.getElementById('audio-player');
 const currentTimeElement = document.getElementById('current-time');
 const totalTimeElement = document.getElementById('total-time');
@@ -41,14 +67,22 @@ const editCueModal = document.getElementById('edit-cue-modal');
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-  // Load projects on startup
-  loadProjects();
-  
-  // Set up event listeners
+  checkAuthStatus(); // Check auth status first
   setupEventListeners();
-
-  // Display app version
   displayAppVersion();
+  // Initialize routing based on URL hash
+  if (location.hash) {
+    const view = location.hash.replace('#/', '');
+    showView(view);
+  } else {
+    showView('gallery');
+  }
+});
+
+// Handle hash changes
+window.addEventListener('hashchange', () => {
+  const view = location.hash.replace('#/', '');
+  showView(view);
 });
 
 // Display App Version
@@ -61,15 +95,23 @@ function displayAppVersion() {
 
 // Setup all event listeners
 function setupEventListeners() {
-  // Project navigation
-  backButton.addEventListener('click', showProjectList);
-  
-  // Project actions
+  // Auth navigation & View Switching
+  showRegisterLink.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/register'; });
+  showLoginLink.addEventListener('click', (e) => { e.preventDefault(); location.hash = '#/login'; });
+  galleryNavBtn.addEventListener('click', () => { location.hash = '#/gallery'; });
+  myProjectsNavBtn.addEventListener('click', () => { location.hash = '#/my-projects'; });
+  backButton.addEventListener('click', handleBackButton); // Updated handler
+
+  // Auth forms
+  loginForm.addEventListener('submit', handleLogin);
+  registerForm.addEventListener('submit', handleRegister);
+
+  // Project actions (My Projects view)
   document.getElementById('create-project-btn').addEventListener('click', showCreateProjectModal);
   document.getElementById('create-project-form').addEventListener('submit', createProject);
   document.getElementById('edit-project-form').addEventListener('submit', updateProject);
   
-  // Track actions
+  // Track actions (Project Detail view)
   document.getElementById('upload-track-btn').addEventListener('click', () => {
     trackUploadInput.click();
   });
@@ -150,19 +192,147 @@ function setupEventListeners() {
 
 // API Functions
 
-// Fetch all projects
-async function loadProjects() {
+// API Functions
+
+// --- Auth API Functions ---
+async function checkAuthStatus() {
   try {
-    const response = await fetch('/api/projects');
-    if (!response.ok) throw new Error('Failed to load projects');
-    
-    const projects = await response.json();
-    renderProjects(projects);
+    const response = await fetch('/api/auth/status');
+    const data = await response.json();
+    if (data.loggedIn) {
+      currentUser = data.user;
+      updateAuthNavigation();
+      showView('gallery'); // Default to gallery if logged in
+      loadGalleryProjects(); // Load gallery projects
+      loadMyProjects(); // Also load user's projects for "My Projects" view
+    } else {
+      currentUser = null;
+      updateAuthNavigation();
+      showView('gallery'); // Default to gallery if not logged in
+      loadGalleryProjects(); // Load gallery projects for non-logged-in users
+    }
   } catch (error) {
-    console.error('Error loading projects:', error);
-    showError('Failed to load projects. Please try again.');
+    console.error('Error checking auth status:', error);
+    currentUser = null;
+    updateAuthNavigation();
+    showView('gallery'); // Fallback to gallery on error
+    loadGalleryProjects(); // Load gallery projects on error
   }
 }
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed');
+    }
+    currentUser = data.user;
+    updateAuthNavigation();
+    showView('gallery'); // Go to gallery after login
+    loadGalleryProjects();
+    loadMyProjects();
+    loginForm.reset();
+  } catch (error) {
+    console.error('Login error:', error);
+    showError(error.message || 'Login failed. Please check your credentials.');
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  const artistName = document.getElementById('register-artist-name').value;
+  const email = document.getElementById('register-email').value;
+  const password = document.getElementById('register-password').value;
+  const description = document.getElementById('register-description').value;
+  try {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artistName, email, password, description })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Registration failed');
+    }
+    currentUser = data.user; // User is auto-logged in by backend
+    updateAuthNavigation();
+    showView('gallery'); // Go to gallery after registration
+    loadGalleryProjects();
+    loadMyProjects();
+    registerForm.reset();
+  } catch (error) {
+    console.error('Registration error:', error);
+    showError(error.message || 'Registration failed. Please try again.');
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    currentProject = null; // Clear current project on logout
+    stopAudio(); // Stop any playing audio
+    updateAuthNavigation();
+    showView('gallery'); // Show gallery after logout
+    loadGalleryProjects(); // Load gallery projects after logout
+    // Clear project containers (gallery will be repopulated by loadGalleryProjects)
+    if(myProjectsContainer) myProjectsContainer.innerHTML = '<div class="empty-message">Login to see your projects.</div>';
+    if(tracksContainer) tracksContainer.innerHTML = '';
+    if(cuesContainer) cuesContainer.innerHTML = '';
+
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    showError('Logout failed. Please try again.');
+  }
+}
+
+
+// --- Project API Functions ---
+
+// Fetch user's projects (My Projects)
+async function loadMyProjects() {
+  if (!currentUser) return; // Should not happen if called correctly
+  try {
+    const response = await fetch('/api/projects'); // This now fetches user's projects
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to load your projects');
+    }
+    const projects = await response.json();
+    renderMyProjects(projects);
+  } catch (error) {
+    console.error('Error loading my projects:', error);
+    showError(error.message || 'Failed to load your projects.');
+    renderMyProjects([]); // Show empty state on error
+  }
+}
+
+// Fetch all projects for the gallery
+async function loadGalleryProjects() {
+  try {
+    const response = await fetch('/api/gallery/projects');
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to load gallery projects');
+    }
+    const projects = await response.json();
+    renderGalleryProjects(projects);
+  } catch (error) {
+    console.error('Error loading gallery projects:', error);
+    showError(error.message || 'Failed to load gallery projects.');
+    renderGalleryProjects([]); // Show empty state on error
+  }
+}
+
 
 // Create a new project
 async function createProject(event) {
@@ -188,11 +358,18 @@ async function createProject(event) {
     closeAllModals();
     nameInput.value = '';
     
-    // Reload projects or add the new one to the list
-    loadProjects();
+    // Reload user's projects and gallery projects
+    loadMyProjects();
+    loadGalleryProjects(); // Add this line
   } catch (error) {
     console.error('Error creating project:', error);
+    // Check if error is due to unauthorized (e.g. session expired)
+    if (error.message.toLowerCase().includes('unauthorized') || (error.response && error.response.status === 401)) {
+        showError('Your session may have expired. Please login again.');
+        handleLogout(); // Force logout
+    } else {
     showError('Failed to create project. Please try again.');
+    }
   }
 }
 
@@ -226,11 +403,21 @@ async function updateProject(event) {
       projectNameElement.textContent = name;
     }
     
-    // Reload projects
-    loadProjects();
+    // Reload user's projects
+    loadMyProjects();
+    // If the project was updated from the gallery view, reload gallery too
+    if (currentView === 'gallery') {
+        loadGalleryProjects();
+    }
   } catch (error) {
     console.error('Error updating project:', error);
-    showError('Failed to update project. Please try again.');
+    if (error.message.toLowerCase().includes('unauthorized') || (error.response && error.response.status === 401) ||
+        error.message.toLowerCase().includes('forbidden') || (error.response && error.response.status === 403)) {
+        showError('You are not authorized to perform this action or your session expired.');
+        checkAuthStatus(); // Re-check auth, might log out
+    } else {
+        showError('Failed to update project. Please try again.');
+    }
   }
 }
 
@@ -245,54 +432,125 @@ async function deleteProject(projectId) {
       method: 'DELETE'
     });
     
-    if (!response.ok) throw new Error('Failed to delete project');
-    
-    // If the deleted project is the current one, go back to project list
-    if (currentProject && currentProject.id === projectId) {
-      showProjectList();
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to delete project');
     }
     
-    // Reload projects
-    loadProjects();
+    // If the deleted project is the current one, go back to the previous view
+    if (currentProject && currentProject.id === projectId) {
+      handleBackButton(); // Go back to My Projects or Gallery
+    }
+    
+    // Reload user's projects and gallery projects
+    loadMyProjects();
+    loadGalleryProjects();
   } catch (error) {
     console.error('Error deleting project:', error);
-    showError('Failed to delete project. Please try again.');
+     if (error.message.toLowerCase().includes('unauthorized') || (error.response && error.response.status === 401) ||
+        error.message.toLowerCase().includes('forbidden') || (error.response && error.response.status === 403)) {
+        showError('You are not authorized to perform this action or your session expired.');
+        checkAuthStatus();
+    } else {
+        showError('Failed to delete project. Please try again.');
+    }
   }
 }
 
-// Load project details
-async function loadProjectDetails(projectId) {
+// Load project details (for both gallery and my projects)
+async function loadProjectDetails(projectId, autoPlay = false) { 
+  console.log(`loadProjectDetails called for projectId: ${projectId}, autoPlay: ${autoPlay}. Current view: ${currentView}`);
   try {
-    const response = await fetch(`/api/projects/${projectId}`);
-    if (!response.ok) throw new Error('Failed to load project details');
+    // Determine which API endpoint to use based on context
+    // For simplicity, gallery projects already fetch tracks/cues.
+    // If coming from "My Projects" or if owner clicks their project in gallery, use the owner-specific endpoint.
+    // The gallery data structure already includes tracks and cues.
     
-    const projectData = await response.json();
+    let projectData;
+    let sourceView = currentView; // Remember where we came from
+
+    // If we have full project data from a gallery item that was clicked, and it's the same project,
+    // and currentProject is already populated from that click, we might reuse it.
+    // However, for "My Projects", we always need to fetch full details.
+    // The gallery items from /api/gallery/projects already include tracks and cues.
     
-    // Find the project in the list to get its name
-    const projectsResponse = await fetch('/api/projects');
-    const projects = await projectsResponse.json();
-    const project = projects.find(p => p.id === projectId);
+    // Check if the globally stored currentProject is the one we want and already has details (e.g., from a gallery click)
+    if (sourceView === 'gallery' && currentProject && currentProject.id === projectId && currentProject.tracks && currentProject.cuePoints) {
+        // This 'project' would be the one passed from createProjectListItem if we decide to pass it.
+        // For now, the click handler in createProjectListItem for gallery items also calls loadProjectDetails(project.id)
+        // which means currentProject might not be set yet from the list item.
+        // The gallery endpoint /api/gallery/projects returns projects with tracks and cues.
+        // The /api/projects (My Projects list) does not.
+        // The /api/projects/:projectId (owner detail view) returns full details.
+
+        // Let's simplify: if the project object passed to createProjectListItem (and thus available in its scope)
+        // already has tracks and cues (i.e., it came from the gallery API), we can use it.
+        // This requires `project` to be in scope or passed to `loadProjectDetails`.
+        // The current `loadProjectDetails(projectId)` only gets ID.
+
+        // So, we always fetch unless currentProject is already set AND matches projectId AND has tracks/cues.
+        // This check is more for re-entry or if currentProject was set by gallery item click.
+        if (currentProject && currentProject.id === projectId && currentProject.tracks && currentProject.cuePoints) {
+            console.log('Using already loaded currentProject data for gallery item.');
+            projectData = currentProject;
+        } else {
+             console.log(`Fetching project details for ${projectId} from /api/projects/${projectId}`);
+            // Fetch full details, this endpoint is protected for owners
+            const response = await fetch(`/api/projects/${projectId}`); 
+            if (!response.ok) {
+                const errData = await response.json();
+                console.error(`Failed to fetch project details for ${projectId}. Status: ${response.status}`, errData);
+                if (response.status === 403 || response.status === 401) {
+                     showError("You don't have permission to view these project details for editing, or your session expired.");
+                     checkAuthStatus(); 
+                     return; 
+                }
+                throw new Error(errData.error || 'Failed to load project details');
+            }
+            projectData = await response.json();
+            console.log('Fetched projectData:', projectData);
+        }
+    } else { // Not from gallery, or gallery item data wasn't sufficient/available, so fetch.
+        console.log(`Fetching project details for ${projectId} from /api/projects/${projectId} (not gallery path or data incomplete)`);
+        const response = await fetch(`/api/projects/${projectId}`); 
+        if (!response.ok) {
+            const errData = await response.json();
+            console.error(`Failed to fetch project details for ${projectId}. Status: ${response.status}`, errData);
+            if (response.status === 403 || response.status === 401) {
+                 showError("You don't have permission to view these project details for editing, or your session expired.");
+                 checkAuthStatus(); 
+                 return; 
+            }
+            throw new Error(errData.error || 'Failed to load project details');
+        }
+        projectData = await response.json();
+        console.log('Fetched projectData:', projectData);
+    }
     
-    if (!project) throw new Error('Project not found');
+    currentProject = projectData; 
+    currentProject.isOwner = currentUser && currentUser.id === projectData.userId;
+    console.log(`Set currentProject.isOwner to: ${currentProject.isOwner}`);
     
-    // Set current project
-    currentProject = {
-      id: projectId,
-      name: project.name,
-      ...projectData
-    };
+    console.log(`Calling showView('project-detail') from loadProjectDetails. Came from: ${sourceView}`);
+    showView('project-detail', { cameFrom: sourceView }); 
     
-    // Show project details view
-    showProjectDetails();
-    
-    // Render tracks and cue points
-    renderTracks(projectData.tracks);
-    renderCuePoints(projectData.cuePoints);
+    projectNameElement.textContent = currentProject.name;
+    renderTracks(currentProject.tracks, currentProject.isOwner);
+    renderCuePoints(currentProject.cuePoints, currentProject.isOwner);
+    updateCueTimeline(); // Initialize cue timeline with project data
+
+    if (autoPlay) {
+      console.log(`Auto-playing project ${currentProject.name}`);
+      playAudio();
+    }
+
   } catch (error) {
     console.error('Error loading project details:', error);
-    showError('Failed to load project details. Please try again.');
+    showError(error.message || 'Failed to load project details.');
+    showView(currentView === 'my-projects' ? 'my-projects' : 'gallery'); // Go back to previous list view
   }
 }
+
 
 // Upload tracks
 async function uploadTracks() {
@@ -318,8 +576,8 @@ async function uploadTracks() {
     // Add new tracks to the current project
     currentProject.tracks = [...currentProject.tracks, ...uploadedTracks];
     
-    // Render updated tracks
-    renderTracks(currentProject.tracks);
+    // Render updated tracks (pass ownership for conditional rendering)
+    renderTracks(currentProject.tracks, currentProject.isOwner);
     
     // Reset file input
     trackUploadInput.value = '';
@@ -353,11 +611,17 @@ async function deleteTrack(trackId) {
       currentTrack = null;
     }
     
-    // Render updated tracks
-    renderTracks(currentProject.tracks);
+    // Render updated tracks (pass ownership)
+    renderTracks(currentProject.tracks, currentProject.isOwner);
   } catch (error) {
     console.error('Error deleting track:', error);
-    showError('Failed to delete track. Please try again.');
+    if (error.message.toLowerCase().includes('unauthorized') || (error.response && error.response.status === 401) ||
+        error.message.toLowerCase().includes('forbidden') || (error.response && error.response.status === 403)) {
+        showError('You are not authorized to perform this action or your session expired.');
+        checkAuthStatus();
+    } else {
+        showError('Failed to delete track. Please try again.');
+    }
   }
 }
 
@@ -393,8 +657,8 @@ async function createCuePoint(event) {
     // Sort cue points by time
     currentProject.cuePoints.sort((a, b) => a.time - b.time);
     
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
+    // Render updated cue points (pass ownership)
+    renderCuePoints(currentProject.cuePoints, currentProject.isOwner);
     
     // Update upcoming cue points if playing
     if (isPlaying) {
@@ -441,8 +705,8 @@ async function updateCuePoint(event) {
     // Sort cue points by time
     currentProject.cuePoints.sort((a, b) => a.time - b.time);
     
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
+    // Render updated cue points (pass ownership)
+    renderCuePoints(currentProject.cuePoints, currentProject.isOwner);
     
     // Update upcoming cue points if playing
     if (isPlaying) {
@@ -472,8 +736,8 @@ async function deleteCuePoint(cueId) {
     // Remove cue point from current project
     currentProject.cuePoints = currentProject.cuePoints.filter(c => c.id !== cueId);
     
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
+    // Render updated cue points (pass ownership)
+    renderCuePoints(currentProject.cuePoints, currentProject.isOwner);
     
     // Update upcoming cue points if playing
     if (isPlaying) {
@@ -487,83 +751,255 @@ async function deleteCuePoint(cueId) {
 
 // UI Functions
 
-// Render projects list
-function renderProjects(projects) {
-  // Clear container
-  projectsContainer.innerHTML = '';
+// UI Functions
+
+function updateAuthNavigation() {
+  authNavigation.innerHTML = ''; // Clear existing
+  if (currentUser) {
+    const welcomeMsg = document.createElement('span');
+    welcomeMsg.className = 'nav-text';
+    welcomeMsg.textContent = `Welcome, ${escapeHtml(currentUser.artistName)}!`;
+    authNavigation.appendChild(welcomeMsg);
+
+    const logoutButton = document.createElement('button');
+    logoutButton.id = 'logout-btn';
+    logoutButton.className = 'nav-button auth-button';
+    logoutButton.innerHTML = '<i class="fas fa-sign-out-alt"></i> Logout';
+    logoutButton.addEventListener('click', handleLogout);
+    authNavigation.appendChild(logoutButton);
+
+    galleryNavBtn.classList.remove('hidden');
+    myProjectsNavBtn.classList.remove('hidden');
+  } else {
+    const loginButton = document.createElement('button');
+    loginButton.id = 'login-nav-btn';
+    loginButton.className = 'nav-button auth-button';
+    loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+    loginButton.addEventListener('click', () => showView('login'));
+    authNavigation.appendChild(loginButton);
+
+    const registerButton = document.createElement('button');
+    registerButton.id = 'register-nav-btn';
+    registerButton.className = 'nav-button auth-button';
+    registerButton.innerHTML = '<i class="fas fa-user-plus"></i> Register';
+    registerButton.addEventListener('click', () => showView('register'));
+    authNavigation.appendChild(registerButton);
+    
+    galleryNavBtn.classList.add('hidden'); // Hide main nav if not logged in
+    myProjectsNavBtn.classList.add('hidden');
+  }
+}
+
+function showView(viewName, options = {}) {
+  // Hide all main views and auth views
+  [loginView, registerView, galleryView, myProjectsView, projectDetailView].forEach(v => v.classList.add('hidden'));
   
-  if (projects.length === 0) {
-    projectsContainer.innerHTML = '<div class="empty-message">No projects yet. Create one to get started!</div>';
+  currentView = viewName; // Update global current view state
+
+  switch (viewName) {
+    case 'login':
+      loginView.classList.remove('hidden');
+      backButton.classList.add('hidden');
+      galleryNavBtn.classList.add('hidden');
+      myProjectsNavBtn.classList.add('hidden');
+      break;
+    case 'register':
+      registerView.classList.remove('hidden');
+      backButton.classList.add('hidden');
+      galleryNavBtn.classList.add('hidden');
+      myProjectsNavBtn.classList.add('hidden');
+      break;
+    case 'gallery':
+      galleryView.classList.remove('hidden');
+      backButton.classList.add('hidden'); // No back button from gallery main
+      if(currentUser) {
+        galleryNavBtn.classList.remove('hidden');
+        myProjectsNavBtn.classList.remove('hidden');
+      }
+      // loadGalleryProjects(); // Data loading should be triggered by auth status or nav click
+      break;
+    case 'my-projects':
+      myProjectsView.classList.remove('hidden');
+      backButton.classList.add('hidden'); // No back button from my-projects main
+      if(currentUser) {
+        galleryNavBtn.classList.remove('hidden');
+        myProjectsNavBtn.classList.remove('hidden');
+      }
+      // loadMyProjects(); // Data loading should be triggered by auth status or nav click
+      break;
+    case 'project-detail':
+      projectDetailView.classList.remove('hidden');
+      // backButton.classList.remove('hidden'); // Removed as per request
+      backButton.dataset.cameFrom = options.cameFrom || (currentUser ? 'my-projects' : 'gallery'); // Store where we came from
+      if(currentUser) {
+        galleryNavBtn.classList.remove('hidden');
+        myProjectsNavBtn.classList.remove('hidden');
+      }
+      break;
+  }
+  updateAuthNavigation(); // Ensure auth nav is always correct for the view
+
+  // Manage global player visibility
+  if (globalPlayerControls) {
+    if (viewName === 'login' || viewName === 'register' || !currentProject) {
+      globalPlayerControls.classList.add('hidden');
+    } else {
+      // Show player if on gallery, my-projects, or project-detail AND a project is loaded
+      if (['gallery', 'my-projects', 'project-detail'].includes(viewName) && currentProject) {
+        globalPlayerControls.classList.remove('hidden');
+      } else {
+        // This case might not be strictly necessary if !currentProject already hides it
+        globalPlayerControls.classList.add('hidden');
+      }
+    }
+  }
+}
+
+function handleBackButton() {
+    stopAudio();
+    history.back();
+}
+
+
+// Render user's projects list (My Projects)
+function renderMyProjects(projects) {
+  myProjectsContainer.innerHTML = '';
+  if (!projects || projects.length === 0) {
+    myProjectsContainer.innerHTML = '<div class="empty-message">You haven\'t created any projects yet.</div>';
     return;
   }
-  
-  // Sort projects by creation date (newest first)
-  projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  
-  // Create project items
+  projects.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); // Sort by last updated
   projects.forEach(project => {
-    const projectItem = document.createElement('div');
-    projectItem.className = 'project-item';
-    
-    const date = new Date(project.createdAt);
-    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-    
-    projectItem.innerHTML = `
-      <div class="project-info">
-        <div class="project-name">${escapeHtml(project.name)}</div>
-        <div class="project-date">Created: ${formattedDate}</div>
-      </div>
-      <div class="project-actions">
-        <button class="edit-btn" title="Edit Project"><i class="fas fa-edit"></i></button>
-        <button class="delete-btn" title="Delete Project"><i class="fas fa-trash"></i></button>
-      </div>
-    `;
-    
-    // Add click event to open project
-    projectItem.addEventListener('click', (e) => {
-      // Don't open if clicking on action buttons
-      if (e.target.closest('.project-actions')) return;
-      
-      loadProjectDetails(project.id);
-    });
-    
-    // Add edit button event
-    projectItem.querySelector('.edit-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      showEditProjectModal(project);
-    });
-    
-    // Add delete button event
-    projectItem.querySelector('.delete-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteProject(project.id);
-    });
-    
-    projectsContainer.appendChild(projectItem);
+    const projectItem = createProjectListItem(project, true); // true for isOwner
+    myProjectsContainer.appendChild(projectItem);
   });
 }
 
-// Render tracks list
-function renderTracks(tracks) {
-  // Clear container
+// Render gallery projects list
+function renderGalleryProjects(projects) {
+  galleryProjectsContainer.innerHTML = '';
+  if (!projects || projects.length === 0) {
+    galleryProjectsContainer.innerHTML = '<div class="empty-message">No projects in the gallery yet.</div>';
+    return;
+  }
+  // Projects from gallery are already sorted by backend (updatedAt DESC)
+  projects.forEach(project => {
+    const isOwner = currentUser && currentUser.id === project.userId;
+    const projectItem = createProjectListItem(project, isOwner, true); // true for isGalleryItem
+    galleryProjectsContainer.appendChild(projectItem);
+  });
+}
+
+// Helper to create a project list item (for My Projects or Gallery)
+function createProjectListItem(project, isOwner, isGalleryItem = false) {
+    const projectItem = document.createElement('div');
+    projectItem.className = 'project-item';
+    projectItem.dataset.projectId = project.id;
+
+    const createdDate = new Date(project.createdAt).toLocaleDateString();
+    const updatedDate = new Date(project.updatedAt).toLocaleDateString();
+    let ownerInfo = '';
+    if (isGalleryItem) {
+        ownerInfo = `<div class="project-owner">By: ${escapeHtml(project.ownerArtistName || 'Unknown')}</div>`;
+    }
+
+    projectItem.innerHTML = `
+      <div class="project-info">
+        <div class="project-name">${escapeHtml(project.name)}</div>
+        ${ownerInfo}
+        <div class="project-date">Created: ${createdDate} | Updated: ${updatedDate}</div>
+      </div>
+      <div class="project-actions">
+        <button class="gallery-item-play-btn action-icon-btn" title="Play Project"><i class="fas fa-play"></i></button>
+        ${isOwner ? `<button class="edit-btn action-icon-btn" title="Edit Project"><i class="fas fa-edit"></i></button>` : ''}
+        ${isOwner ? `<button class="delete-btn action-icon-btn" title="Delete Project"><i class="fas fa-trash"></i></button>` : ''}
+      </div>
+    `;
+
+    // Click on the item (but not on action buttons) to view details without auto-play
+    projectItem.addEventListener('click', (e) => {
+        if (e.target.closest('.project-actions')) {
+            return; // Click was on an action button, not the item itself
+        }
+        console.log(`Project item (area) clicked for project ID: ${project.id}, Name: ${project.name}`);
+        loadProjectDetails(project.id, false); // autoPlay = false
+    });
+
+    // Click on the specific play button in the list item to play immediately
+    projectItem.querySelector('.gallery-item-play-btn').addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent projectItem click listener (which navigates to detail view)
+        console.log(`Gallery item PLAY button clicked for project ID: ${project.id}, Name: ${project.name}`);
+        
+        // Set currentProject with the data from the gallery item
+        // Gallery items from /api/gallery/projects should have tracks and cuePoints
+        currentProject = project; 
+        currentProject.isOwner = currentUser && currentUser.id === project.userId;
+
+        // Ensure player UI elements are updated for this project
+        if (globalPlayerControls) {
+            globalPlayerControls.classList.remove('hidden');
+        }
+        
+        // Update player UI elements like "Now Playing", total time, cue timeline
+        // This might involve selecting a default/first track if currentTrack is not set or from another project
+        currentTrack = null; // Reset currentTrack to ensure playAudio picks one from the new project
+        
+        // Update total time and cue timeline based on the new currentProject
+        // Need to ensure audioPlayer.duration is available or use project.tracks[0].duration as fallback
+        // For now, playAudio will handle initial track selection and metadata loading.
+        // We might need to explicitly update some UI elements here if playAudio doesn't cover them before playing.
+        if (currentProject.tracks && currentProject.tracks.length > 0) {
+            const tempTrack = currentProject.tracks[0];
+            if(currentTrackNameElement) currentTrackNameElement.textContent = tempTrack.originalName; // Tentative name
+            if(totalTimeElement) totalTimeElement.textContent = formatTime(tempTrack.duration); // Tentative duration
+        } else {
+            if(currentTrackNameElement) currentTrackNameElement.textContent = "None";
+            if(totalTimeElement) totalTimeElement.textContent = formatTime(0);
+        }
+        updateCueTimeline(); // Update cue timeline for the new project
+
+        playAudio(); // Start playback
+    });
+    
+    if (isOwner) {
+        projectItem.querySelector('.edit-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          showEditProjectModal(project);
+        });
+        projectItem.querySelector('.delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteProject(project.id);
+        });
+    }
+    return projectItem;
+}
+
+
+// Render tracks list (now accepts isOwner flag)
+function renderTracks(tracks, isOwner = false) {
   tracksContainer.innerHTML = '';
-  
+  const uploadBtnContainer = document.getElementById('upload-track-btn').parentNode; // Get header of tracks section
+
+  if (isOwner) {
+    uploadBtnContainer.classList.remove('hidden');
+  } else {
+    uploadBtnContainer.classList.add('hidden');
+  }
+
   if (!tracks || tracks.length === 0) {
-    tracksContainer.innerHTML = '<div class="empty-message">No tracks yet. Upload some to get started!</div>';
+    tracksContainer.innerHTML = `<div class="empty-message">No tracks yet. ${isOwner ? 'Upload some to get started!' : ''}</div>`;
     return;
   }
   
-  // Create track items
   tracks.forEach(track => {
     const trackItem = document.createElement('div');
     trackItem.className = 'track-item';
     trackItem.dataset.id = track.id;
-    
     const duration = formatTime(track.duration);
     
     trackItem.innerHTML = `
       <div class="track-info">
-        <button class="track-play-btn" title="Play Track">
+        <button class="track-play-btn action-icon-btn" title="Play Track">
           <i class="fas fa-play"></i>
         </button>
         <div>
@@ -572,94 +1008,58 @@ function renderTracks(tracks) {
         </div>
       </div>
       <div class="track-actions">
-        <button class="delete-btn" title="Delete Track"><i class="fas fa-trash"></i></button>
+        ${isOwner ? `<button class="delete-btn action-icon-btn" title="Delete Track"><i class="fas fa-trash"></i></button>` : ''}
       </div>
     `;
     
-    // Add play button event
-    trackItem.querySelector('.track-play-btn').addEventListener('click', () => {
-      playTrack(track);
-    });
-    
-    // Add delete button event
-    trackItem.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteTrack(track.id);
-    });
-    
+    trackItem.querySelector('.track-play-btn').addEventListener('click', () => playTrack(track));
+    if (isOwner) {
+      trackItem.querySelector('.delete-btn').addEventListener('click', () => deleteTrack(track.id));
+    }
     tracksContainer.appendChild(trackItem);
   });
 }
 
-// Render cue points list
-function renderCuePoints(cuePoints) {
-  // Clear container
+// Render cue points list (now accepts isOwner flag)
+function renderCuePoints(cuePoints, isOwner = false) {
   cuesContainer.innerHTML = '';
-  
+  const addCueBtnContainer = document.getElementById('add-cue-btn').parentNode;
+
+  if (isOwner) {
+    addCueBtnContainer.classList.remove('hidden');
+  } else {
+    addCueBtnContainer.classList.add('hidden');
+  }
+
   if (!cuePoints || cuePoints.length === 0) {
-    cuesContainer.innerHTML = '<div class="empty-message">No cue points yet. Add some to enable track switching!</div>';
+    cuesContainer.innerHTML = `<div class="empty-message">No cue points yet. ${isOwner ? 'Add some!' : ''}</div>`;
+    updateCueTimeline(); // Still update timeline (it will clear if no cues)
     return;
   }
   
-  // Sort cue points by time
   cuePoints.sort((a, b) => a.time - b.time);
-  
-  // Create cue point items
   cuePoints.forEach(cue => {
     if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
     const cueItem = document.createElement('div');
     cueItem.className = 'cue-item';
-    
     const formattedTime = formatTime(cue.time);
     
     cueItem.innerHTML = `
       <span class="cue-color" style="background-color: ${cueColors[cue.id]}"></span>
       <div class="cue-time">${formattedTime}</div>
       <div class="cue-actions">
-        <button class="edit-btn" title="Edit Cue Point"><i class="fas fa-edit"></i></button>
-        <button class="delete-btn" title="Delete Cue Point"><i class="fas fa-trash"></i></button>
+        ${isOwner ? `<button class="edit-btn action-icon-btn" title="Edit Cue Point"><i class="fas fa-edit"></i></button>` : ''}
+        ${isOwner ? `<button class="delete-btn action-icon-btn" title="Delete Cue Point"><i class="fas fa-trash"></i></button>` : ''}
       </div>
     `;
     
-    // Add edit button event
-    cueItem.querySelector('.edit-btn').addEventListener('click', () => {
-      showEditCueModal(cue);
-    });
-    
-    // Add delete button event
-    cueItem.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteCuePoint(cue.id);
-    });
-    
+    if (isOwner) {
+      cueItem.querySelector('.edit-btn').addEventListener('click', () => showEditCueModal(cue));
+      cueItem.querySelector('.delete-btn').addEventListener('click', () => deleteCuePoint(cue.id));
+    }
     cuesContainer.appendChild(cueItem);
   });
   updateCueTimeline();
-}
-
-// Show project list view
-function showProjectList() {
-  // Stop any playing audio
-  stopAudio();
-  
-  // Reset current project
-  currentProject = null;
-  
-  // Show project list, hide project details
-  projectListView.classList.remove('hidden');
-  projectDetailView.classList.add('hidden');
-  backButton.classList.add('hidden');
-}
-
-// Show project details view
-function showProjectDetails() {
-  if (!currentProject) return;
-  
-  // Update project name
-  projectNameElement.textContent = currentProject.name;
-  
-  // Hide project list, show project details
-  projectListView.classList.add('hidden');
-  projectDetailView.classList.remove('hidden');
-  backButton.classList.remove('hidden');
 }
 
 // Modal functions
@@ -1022,10 +1422,17 @@ function updateCueTimeline() {
     dot.className = 'cue-point';
     dot.style.left = (cue.time / duration * 100) + '%';
     dot.style.backgroundColor = cueColors[cue.id];
-    dot.addEventListener('mousedown', (e) => {
-      draggingCueId = cue.id;
-      e.preventDefault();
-    });
+
+    // Cue points are draggable only if the user is the owner AND is on the project detail view
+    if (currentProject && currentProject.isOwner && currentView === 'project-detail') {
+      dot.classList.add('draggable'); 
+      dot.addEventListener('mousedown', (e) => {
+        draggingCueId = cue.id;
+        e.preventDefault();
+      });
+    } else {
+      dot.classList.add('non-draggable'); 
+    }
     cuePointsContainer.appendChild(dot);
   });
   const progress = (audioPlayer.currentTime / duration) * 100;

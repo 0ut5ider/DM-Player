@@ -679,3 +679,84 @@ Key changes include:
 - MP3 files will continue to be stored in the `projects/[project_id]/audio/` directories.
 - A new `dm_player.sqlite` file will be created in the project root to store all application data.
 
+
+---
+# User Authentication and Gallery Implementation Summary (Added on 10/05/2025)
+
+The main goal of this phase was to add user authentication (registration, login, logout), project ownership, and a public gallery to the DM Player application.
+
+**Key Features and Implementation Steps:**
+
+1.  **Initial Planning:**
+    *   Defined new database schema requirements: a `users` table and modifications to the `projects` table to include `userId` (linking to `users`) and `updatedAt` fields.
+    *   Outlined backend changes:
+        *   New dependencies: `bcryptjs` (for password hashing), `express-session` (for session management), `connect-sqlite3` (SQLite session store).
+        *   Authentication middleware: `isAuthenticated` (to check if a user is logged in) and `isProjectOwner` (to verify if the logged-in user owns a specific project).
+        *   New API endpoints for authentication: `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/status`.
+        *   Modifications to existing project, track, and cue API endpoints to enforce authentication, check ownership for write operations, and update project `updatedAt` timestamps on changes.
+        *   New API endpoint for the general track gallery: `GET /api/gallery/projects`, which fetches all projects along with owner's artist name, and associated track/cue data for playback. This endpoint does not require authentication.
+    *   Outlined frontend changes (`public/index.html`, `public/app.js`):
+        *   New HTML views/sections for Login, User Registration, General Track Gallery, and "My Projects".
+        *   Dynamic navigation bar showing Login/Register buttons or Welcome message/Logout button based on authentication state.
+        *   JavaScript logic for managing user authentication state, handling API calls to auth endpoints, switching between different application views, and conditionally rendering UI elements (e.g., edit/delete buttons) based on project ownership.
+        *   Global player controls moved out of the project detail view to be accessible across different views.
+    *   Security considerations: Password hashing with `bcryptjs`, secure session cookies.
+    *   Navigation flow:
+        *   Anonymous users see Login/Register options and default to the General Gallery.
+        *   Logged-in users see Logout, Welcome message, and links to "General Gallery" and "My Projects".
+        *   Clicking a play button on a gallery item plays the project using the global player without navigating away.
+        *   Clicking a project item's area navigates to the project detail view.
+
+2.  **Backend Implementation (`server.js`, `database.js`):**
+    *   `package.json` updated with `bcryptjs`, `express-session`, `connect-sqlite3`.
+    *   `database.js` modified:
+        *   Added `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, artistName TEXT, email TEXT UNIQUE, passwordHash TEXT, description TEXT, createdAt TEXT, updatedAt TEXT)`.
+        *   Updated `projects` table schema to include `userId TEXT NOT NULL FOREIGN KEY REFERENCES users(id) ON DELETE CASCADE` and `updatedAt TEXT NOT NULL`.
+    *   `server.js` updated:
+        *   Required and configured `express-session` with `connect-sqlite3` for persistent sessions stored in `dm_player.sqlite`.
+        *   Implemented `isAuthenticated` and `isProjectOwner` middleware.
+        *   Added API routes: `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/status`.
+        *   Added `GET /api/gallery/projects` route.
+        *   Modified existing CRUD API routes for projects, tracks, and cues to use the authentication middleware, associate projects with `userId`, and update `updatedAt` timestamps.
+        *   Ensured `multer` configuration for file uploads (`upload` variable) was correctly defined and accessible.
+
+3.  **Frontend Implementation (`public/index.html`, `public/app.js`):**
+    *   **HTML (`index.html`):**
+        *   Added `divs` for new views: `login-view`, `register-view`, `gallery-view`, `my-projects-view`.
+        *   Updated `<header>` to include `<div id="auth-navigation">` (for dynamic login/logout buttons) and main navigation buttons (`gallery-nav-btn`, `my-projects-nav-btn`).
+        *   Moved player controls (`<div class="player-controls">...</div>`) into a new global container `<div id="global-player-controls" class="player-controls hidden">`.
+    *   **JavaScript (`app.js`):**
+        *   Added global state: `currentUser`, `currentView`.
+        *   Added DOM references for new views, navigation elements, and `globalPlayerControls`.
+        *   Implemented `showView()` to manage visibility of views and `globalPlayerControls`.
+        *   Implemented `updateAuthNavigation()` for dynamic auth-related buttons.
+        *   Implemented `handleBackButton()` for view navigation.
+        *   Added auth functions: `checkAuthStatus()` (called on page load), `handleLogin()`, `handleRegister()`, `handleLogout()`.
+        *   Added data loading: `loadMyProjects()` (for `/api/projects`) and `loadGalleryProjects()` (for `/api/gallery/projects`).
+        *   Updated rendering:
+            *   `renderMyProjects()` and `renderGalleryProjects()` use `createProjectListItem()`.
+            *   `createProjectListItem()`:
+                *   Displays project info, owner (for gallery), dates.
+                *   Conditionally shows Edit/Delete buttons based on `isOwner`.
+                *   Makes the main project item area clickable to call `loadProjectDetails(project.id, false)` (view details, no auto-play).
+                *   Adds a play button (`.gallery-item-play-btn`) that, when clicked, sets `currentProject` with full data from the gallery item, shows global player, and calls `playAudio()` without navigating away from the list view.
+            *   `renderTracks()` and `renderCuePoints()` accept `isOwner` to show/hide editing controls within the project detail view.
+        *   Updated `loadProjectDetails(projectId, autoPlay = false)`:
+            *   Accepts `autoPlay` flag.
+            *   Fetches full project data from `/api/projects/:projectId` if not already available (e.g., for "My Projects" items or if gallery item data is stale/minimal).
+            *   Sets `currentProject.isOwner`.
+            *   Shows `project-detail-view` and renders its content.
+            *   Calls `playAudio()` if `autoPlay` is true.
+        *   Updated `updateCueTimeline()`: Cue point dots are made draggable only if `currentProject.isOwner` is true AND `currentView` is `'project-detail'`.
+        *   Ensured `createProject`, `updateProject`, `deleteProject` also call `loadGalleryProjects()` to refresh gallery data.
+
+4.  **Troubleshooting & Refinements During Implementation:**
+    *   Resolved `SQLITE_ERROR: no such column: p.updatedAt` by advising deletion and recreation of `dm_player.sqlite` to apply the latest schema.
+    *   Fixed `ReferenceError: upload is not defined` in `server.js`.
+    *   Addressed issues with navigating to project details from "My Projects" list by ensuring `loadProjectDetails` is correctly called.
+    *   Refined gallery item play button behavior to use the global player without navigating away from the gallery.
+    *   Corrected `ReferenceError: project is not defined` in `loadProjectDetails`.
+    *   Fixed `ReferenceError: globalPlayerControls is not defined` in `app.js`.
+    *   Ensured cue point draggability is restricted to the project detail view for owners.
+
+The application now supports a multi-user environment with distinct views and functionalities, a global player, and refined interactions for playing and managing projects.

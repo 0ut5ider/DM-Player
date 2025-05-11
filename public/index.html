@@ -15,63 +15,127 @@
                 <h1>DM Player</h1>
                 <span id="app-version" class="app-version-text"></span>
             </div>
+            <div id="auth-navigation" class="auth-nav">
+                <!-- Populated by JS -->
+            </div>
             <div id="navigation">
-                <button id="back-button" class="hidden"><i class="fas fa-arrow-left"></i> Back to Projects</button>
+                 <button id="gallery-nav-btn" class="nav-button hidden"><i class="fas fa-list-alt"></i> General Gallery</button>
+                 <button id="my-projects-nav-btn" class="nav-button hidden"><i class="fas fa-user-cog"></i> My Projects</button>
+                 <button id="back-button" class="nav-button hidden"><i class="fas fa-arrow-left"></i> Back</button>
             </div>
         </header>
 
-        <!-- Project List View -->
-        <div id="project-list-view">
+        <!-- Global Player Controls (initially hidden or styled appropriately) -->
+        <div id="global-player-controls" class="player-controls hidden">
+            <div class="time-display">
+                <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+            </div>
+            <div class="cue-timeline-container">
+                <div id="cue-timeline">
+                    <div id="cue-playback-indicator"></div>
+                    <div id="cue-points-container"></div> <!-- Cue points for the timeline -->
+                </div>
+            </div>
+            <div class="progress-container">
+                <div id="progress-bar">
+                    <div id="progress-indicator"></div>
+                    <div id="progress-handle"></div>
+                </div>
+            </div>
+            <div class="control-buttons">
+                <button id="play-btn" class="control-button">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button id="pause-btn" class="control-button hidden">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button id="stop-btn" class="control-button">
+                    <i class="fas fa-stop"></i>
+                </button>
+            </div>
+            <div class="now-playing">
+                <span>Now Playing: </span>
+                <span id="current-track-name">None</span>
+            </div>
+        </div>
+
+        <!-- Login View (hidden initially) -->
+        <div id="login-view" class="auth-view hidden">
+            <h2>Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn">Login</button>
+                </div>
+                <p class="auth-switch">Don't have an account? <a href="#" id="show-register-link">Register here</a></p>
+            </form>
+        </div>
+
+        <!-- Registration View (hidden initially) -->
+        <div id="register-view" class="auth-view hidden">
+            <h2>Register</h2>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-artist-name">Artist Name:</label>
+                    <input type="text" id="register-artist-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email:</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password (min. 6 characters):</label>
+                    <input type="password" id="register-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="register-description">Description (Optional):</label>
+                    <textarea id="register-description" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn">Register</button>
+                </div>
+                <p class="auth-switch">Already have an account? <a href="#" id="show-login-link">Login here</a></p>
+            </form>
+        </div>
+        
+        <!-- General Gallery View -->
+        <div id="gallery-view" class="main-view hidden">
             <div class="section-header">
-                <h2>Projects</h2>
+                <h2 id="gallery-title">General Track Gallery</h2>
+                <!-- "New Project" button might be conditionally shown here by JS if user is logged in -->
+            </div>
+            <div id="gallery-projects-container" class="list-container">
+                <!-- Gallery projects will be dynamically added here -->
+                <div class="empty-message">No projects in the gallery yet.</div>
+            </div>
+        </div>
+
+        <!-- My Projects View (replaces old project-list-view) -->
+        <div id="my-projects-view" class="main-view hidden">
+            <div class="section-header">
+                <h2>My Projects</h2>
                 <button id="create-project-btn" class="action-button">
                     <i class="fas fa-plus"></i> New Project
                 </button>
             </div>
-            <div id="projects-container" class="list-container">
-                <!-- Projects will be dynamically added here -->
-                <div class="empty-message">No projects yet. Create one to get started!</div>
+            <div id="my-projects-container" class="list-container">
+                <!-- User's projects will be dynamically added here -->
+                <div class="empty-message">You haven't created any projects yet.</div>
             </div>
         </div>
 
         <!-- Project Detail View (hidden initially) -->
-        <div id="project-detail-view" class="hidden">
+        <div id="project-detail-view" class="main-view hidden">
             <div class="project-info">
                 <h2 id="project-name">Project Name</h2>
-            </div>
-
-            <!-- Player Controls -->
-            <div class="player-controls">
-                <div class="time-display">
-                    <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
-                </div>
-                <div class="cue-timeline-container">
-                    <div id="cue-timeline">
-                        <div id="cue-playback-indicator"></div>
-                        <div id="cue-points-container"></div>
-                    </div>
-                </div>
-                <div class="progress-container">
-                    <div id="progress-bar">
-                        <div id="progress-indicator"></div>
-                        <div id="progress-handle"></div>
-                    </div>
-                </div>
-                <div class="control-buttons">
-                    <button id="play-btn" class="control-button">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button id="pause-btn" class="control-button hidden">
-                        <i class="fas fa-pause"></i>
-                    </button>
-                    <button id="stop-btn" class="control-button">
-                        <i class="fas fa-stop"></i>
-                    </button>
-                </div>
-                <div class="now-playing">
-                    <span>Now Playing: </span>
-                    <span id="current-track-name">None</span>
-                </div>
+                <!-- Player controls moved to global scope -->
             </div>
 
             <!-- Tracks Section -->

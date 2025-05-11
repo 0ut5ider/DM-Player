@@ -12,3 +12,5 @@
 1.0.7 : Updated the application to display the version number
 1.0.8 : Display 2 decimal points in cue point editors
 1.0.9 : Switched from json files to SQLite database for storing persistant data 
+1.0.10: User authentication started.
+1.0.11: User authentication functinoal and added url routes

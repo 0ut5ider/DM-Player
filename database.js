@@ -8,12 +8,32 @@ const db = new sqlite3.Database(dbPath, (err) => {
   } else {
     console.log('Connected to the SQLite database.');
     db.serialize(() => {
+      // Create users table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          artistName TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          passwordHash TEXT NOT NULL,
+          description TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating users table', err.message);
+        }
+      });
+
       // Create projects table
       db.run(`
         CREATE TABLE IF NOT EXISTS projects (
           id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
           name TEXT NOT NULL,
-          createdAt TEXT NOT NULL
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
         )
       `, (err) => {
         if (err) {
