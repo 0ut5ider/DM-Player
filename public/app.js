@@ -1,22 +1,36 @@
 // Global state
-const appVersion = "1.0.9";
+let currentUser = null;
+let sessionId = null;
 let currentProject = null;
+let currentTrack = null;
 let cueColors = {};
 let draggingCueId = null;
-let currentTrack = null;
 let upcomingCuePoints = [];
 let isPlaying = false;
-let isTrackSwitching = false; // Flag to prevent multiple track switches at once
+let isTrackSwitching = false;
 let isDragging = false;
+let currentView = 'public-browse';
 
 // DOM Elements
-const projectListView = document.getElementById('project-list-view');
+const publicBrowseView = document.getElementById('public-browse-view');
+const loginView = document.getElementById('login-view');
+const registerView = document.getElementById('register-view');
+const userDashboardView = document.getElementById('user-dashboard-view');
 const projectDetailView = document.getElementById('project-detail-view');
-const projectsContainer = document.getElementById('projects-container');
+const backButton = document.getElementById('back-button');
+
+// Navigation elements
+const anonymousNav = document.getElementById('anonymous-nav');
+const authenticatedNav = document.getElementById('authenticated-nav');
+const usernameDisplay = document.getElementById('username-display');
+
+// Container elements
+const publicProjectsContainer = document.getElementById('public-projects-container');
+const userProjectsContainer = document.getElementById('user-projects-container');
 const tracksContainer = document.getElementById('tracks-container');
 const cuesContainer = document.getElementById('cues-container');
-const backButton = document.getElementById('back-button');
-const projectNameElement = document.getElementById('project-name');
+
+// Audio player elements
 const audioPlayer = document.getElementById('audio-player');
 const currentTimeElement = document.getElementById('current-time');
 const totalTimeElement = document.getElementById('total-time');
@@ -27,56 +41,73 @@ const playButton = document.getElementById('play-btn');
 const pauseButton = document.getElementById('pause-btn');
 const stopButton = document.getElementById('stop-btn');
 const currentTrackNameElement = document.getElementById('current-track-name');
-const trackUploadInput = document.getElementById('track-upload-input');
 const cueTimeline = document.getElementById('cue-timeline');
 const cuePlaybackIndicator = document.getElementById('cue-playback-indicator');
 const cuePointsContainer = document.getElementById('cue-points-container');
 
-// Modal Elements
+// Project detail elements
+const projectNameElement = document.getElementById('project-name');
+const creatorNameElement = document.getElementById('creator-name');
+const projectStatusElement = document.getElementById('project-status');
+const projectControlsElement = document.getElementById('project-controls');
+const uploadTrackBtn = document.getElementById('upload-track-btn');
+const addCueBtn = document.getElementById('add-cue-btn');
+const trackUploadInput = document.getElementById('track-upload-input');
+
+// Modal elements
 const overlay = document.getElementById('overlay');
 const createProjectModal = document.getElementById('create-project-modal');
 const editProjectModal = document.getElementById('edit-project-modal');
 const addCueModal = document.getElementById('add-cue-modal');
 const editCueModal = document.getElementById('edit-cue-modal');
+const confirmModal = document.getElementById('confirm-modal');
+const messageContainer = document.getElementById('message-container');
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-  // Load projects on startup
-  loadProjects();
-  
-  // Set up event listeners
   setupEventListeners();
-
-  // Display app version
-  displayAppVersion();
+  checkAuthStatus();
+  loadPublicProjects();
 });
-
-// Display App Version
-function displayAppVersion() {
-  const versionElement = document.getElementById('app-version');
-  if (versionElement) {
-    versionElement.textContent = `v${appVersion}`;
-  }
-}
 
 // Setup all event listeners
 function setupEventListeners() {
-  // Project navigation
-  backButton.addEventListener('click', showProjectList);
+  // Navigation
+  document.getElementById('browse-public-btn').addEventListener('click', () => showPublicBrowse());
+  document.getElementById('browse-public-auth-btn').addEventListener('click', () => showPublicBrowse());
+  document.getElementById('show-login-btn').addEventListener('click', () => showLogin());
+  document.getElementById('show-register-btn').addEventListener('click', () => showRegister());
+  document.getElementById('my-projects-btn').addEventListener('click', () => showUserDashboard());
+  document.getElementById('logout-btn').addEventListener('click', () => logout());
   
-  // Project actions
+  // Auth form switches
+  document.getElementById('switch-to-register').addEventListener('click', (e) => {
+    e.preventDefault();
+    showRegister();
+  });
+  document.getElementById('switch-to-login').addEventListener('click', (e) => {
+    e.preventDefault();
+    showLogin();
+  });
+  
+  // Auth forms
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('register-form').addEventListener('submit', handleRegister);
+  
+  // Project management
   document.getElementById('create-project-btn').addEventListener('click', showCreateProjectModal);
   document.getElementById('create-project-form').addEventListener('submit', createProject);
   document.getElementById('edit-project-form').addEventListener('submit', updateProject);
+  document.getElementById('edit-project-btn').addEventListener('click', showEditProjectModal);
+  document.getElementById('toggle-status-btn').addEventListener('click', toggleProjectStatus);
+  document.getElementById('delete-project-btn').addEventListener('click', deleteCurrentProject);
   
-  // Track actions
-  document.getElementById('upload-track-btn').addEventListener('click', () => {
-    trackUploadInput.click();
-  });
+  // Track management
+  uploadTrackBtn.addEventListener('click', () => trackUploadInput.click());
   trackUploadInput.addEventListener('change', uploadTracks);
   
-  // Cue point actions
-  document.getElementById('add-cue-btn').addEventListener('click', showAddCueModal);
+  // Cue point management
+  addCueBtn.addEventListener('click', showAddCueModal);
   document.getElementById('add-cue-form').addEventListener('submit', createCuePoint);
   document.getElementById('edit-cue-form').addEventListener('submit', updateCuePoint);
   
@@ -85,18 +116,20 @@ function setupEventListeners() {
   pauseButton.addEventListener('click', pauseAudio);
   stopButton.addEventListener('click', stopAudio);
   progressBar.addEventListener('click', seekAudio);
-  // Scrubber drag events
+  
+  // Progress bar dragging
   progressHandle.addEventListener('mousedown', (e) => {
     e.preventDefault();
     isDragging = true;
   });
+  
   document.addEventListener('mousemove', (e) => {
     if (!isDragging || !audioPlayer.duration) return;
     const rect = progressBar.getBoundingClientRect();
     let pos = (e.clientX - rect.left) / rect.width;
     pos = Math.max(0, Math.min(1, pos));
     const newTime = pos * audioPlayer.duration;
-    // Cue-point-aware drag
+    
     if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
       audioPlayer.currentTime = newTime;
       const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
@@ -110,6 +143,7 @@ function setupEventListeners() {
     progressHandle.style.left = `${pos * 100}%`;
     currentTimeElement.textContent = formatTime(newTime);
   });
+  
   document.addEventListener('mouseup', (e) => {
     if (!isDragging || !audioPlayer.duration) return;
     const rect = progressBar.getBoundingClientRect();
@@ -119,7 +153,6 @@ function setupEventListeners() {
     audioPlayer.currentTime = newTime;
     isDragging = false;
 
-    // Cue-point-aware drag end
     if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
       const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
       if (newTime >= sorted[0].time) {
@@ -140,31 +173,280 @@ function setupEventListeners() {
     updateCueTimeline();
   });
   
+  // Back button
+  backButton.addEventListener('click', handleBackButton);
+  
   // Modal close buttons
   document.querySelectorAll('.cancel-btn').forEach(btn => {
     btn.addEventListener('click', closeAllModals);
   });
   
+  // Confirm modal
+  document.getElementById('confirm-cancel').addEventListener('click', closeAllModals);
+  
   overlay.addEventListener('click', closeAllModals);
+  
+  // Cue point dragging
+  document.addEventListener('mousemove', handleCueDrag);
+  document.addEventListener('mouseup', handleCueDragEnd);
+}
+
+// Authentication Functions
+
+async function checkAuthStatus() {
+  const storedSessionId = localStorage.getItem('sessionId');
+  if (!storedSessionId) {
+    showAnonymousNav();
+    return;
+  }
+
+  try {
+    const response = await apiRequest('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${storedSessionId}` }
+    });
+    
+    if (response.ok) {
+      const user = await response.json();
+      currentUser = user;
+      sessionId = storedSessionId;
+      showAuthenticatedNav();
+    } else {
+      localStorage.removeItem('sessionId');
+      showAnonymousNav();
+    }
+  } catch (error) {
+    console.error('Auth check failed:', error);
+    localStorage.removeItem('sessionId');
+    showAnonymousNav();
+  }
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  
+  try {
+    const response = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      currentUser = data.user;
+      sessionId = data.sessionId;
+      localStorage.setItem('sessionId', sessionId);
+      
+      showAuthenticatedNav();
+      showMessage('Login successful!', 'success');
+      showUserDashboard();
+    } else {
+      const error = await response.json();
+      showMessage(error.error || 'Login failed', 'error');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    showMessage('Login failed. Please try again.', 'error');
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  
+  const username = document.getElementById('register-username').value;
+  const email = document.getElementById('register-email').value;
+  const password = document.getElementById('register-password').value;
+  
+  try {
+    const response = await apiRequest('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password })
+    });
+    
+    if (response.ok) {
+      showMessage('Registration successful! Please login.', 'success');
+      showLogin();
+    } else {
+      const error = await response.json();
+      showMessage(error.error || 'Registration failed', 'error');
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    showMessage('Registration failed. Please try again.', 'error');
+  }
+}
+
+async function logout() {
+  try {
+    if (sessionId) {
+      await apiRequest('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sessionId}` }
+      });
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+  }
+  
+  currentUser = null;
+  sessionId = null;
+  localStorage.removeItem('sessionId');
+  showAnonymousNav();
+  showPublicBrowse();
+  showMessage('Logged out successfully', 'success');
+}
+
+// Navigation Functions
+
+function showAnonymousNav() {
+  anonymousNav.classList.remove('hidden');
+  authenticatedNav.classList.add('hidden');
+}
+
+function showAuthenticatedNav() {
+  anonymousNav.classList.add('hidden');
+  authenticatedNav.classList.remove('hidden');
+  usernameDisplay.textContent = currentUser.username;
+}
+
+function showPublicBrowse() {
+  hideAllViews();
+  publicBrowseView.classList.remove('hidden');
+  currentView = 'public-browse';
+  updateNavButtons();
+  loadPublicProjects();
+}
+
+function showLogin() {
+  hideAllViews();
+  loginView.classList.remove('hidden');
+  currentView = 'login';
+  updateNavButtons();
+}
+
+function showRegister() {
+  hideAllViews();
+  registerView.classList.remove('hidden');
+  currentView = 'register';
+  updateNavButtons();
+}
+
+function showUserDashboard() {
+  if (!currentUser) {
+    showLogin();
+    return;
+  }
+  
+  hideAllViews();
+  userDashboardView.classList.remove('hidden');
+  currentView = 'user-dashboard';
+  updateNavButtons();
+  loadUserProjects();
+}
+
+function showProjectDetail() {
+  hideAllViews();
+  projectDetailView.classList.remove('hidden');
+  backButton.classList.remove('hidden');
+  currentView = 'project-detail';
+  updateNavButtons();
+}
+
+function hideAllViews() {
+  publicBrowseView.classList.add('hidden');
+  loginView.classList.add('hidden');
+  registerView.classList.add('hidden');
+  userDashboardView.classList.add('hidden');
+  projectDetailView.classList.add('hidden');
+  backButton.classList.add('hidden');
+}
+
+function updateNavButtons() {
+  // Remove active class from all nav buttons
+  document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+  
+  // Add active class to current view button
+  if (currentView === 'public-browse') {
+    document.getElementById('browse-public-btn').classList.add('active');
+    document.getElementById('browse-public-auth-btn').classList.add('active');
+  } else if (currentView === 'user-dashboard') {
+    document.getElementById('my-projects-btn').classList.add('active');
+  }
+}
+
+function handleBackButton() {
+  if (currentUser) {
+    showUserDashboard();
+  } else {
+    showPublicBrowse();
+  }
 }
 
 // API Functions
 
-// Fetch all projects
-async function loadProjects() {
+async function apiRequest(url, options = {}) {
+  if (sessionId && !options.headers) {
+    options.headers = {};
+  }
+  if (sessionId) {
+    options.headers['Authorization'] = `Bearer ${sessionId}`;
+  }
+  
+  return fetch(url, options);
+}
+
+async function loadPublicProjects() {
   try {
-    const response = await fetch('/api/projects');
-    if (!response.ok) throw new Error('Failed to load projects');
+    const response = await apiRequest('/api/public/projects');
+    if (!response.ok) throw new Error('Failed to load public projects');
     
-    const projects = await response.json();
-    renderProjects(projects);
+    const groupedProjects = await response.json();
+    renderPublicProjects(groupedProjects);
   } catch (error) {
-    console.error('Error loading projects:', error);
-    showError('Failed to load projects. Please try again.');
+    console.error('Error loading public projects:', error);
+    publicProjectsContainer.innerHTML = '<div class="error-message">Failed to load public projects.</div>';
   }
 }
 
-// Create a new project
+async function loadUserProjects() {
+  if (!currentUser) return;
+  
+  try {
+    const response = await apiRequest('/api/my/projects');
+    if (!response.ok) throw new Error('Failed to load user projects');
+    
+    const projects = await response.json();
+    renderUserProjects(projects);
+  } catch (error) {
+    console.error('Error loading user projects:', error);
+    userProjectsContainer.innerHTML = '<div class="error-message">Failed to load your projects.</div>';
+  }
+}
+
+async function loadProjectDetails(projectId, isPublic = false) {
+  try {
+    const endpoint = isPublic ? `/api/public/projects/${projectId}` : `/api/my/projects/${projectId}`;
+    const response = await apiRequest(endpoint);
+    
+    if (!response.ok) throw new Error('Failed to load project details');
+    
+    const projectData = await response.json();
+    currentProject = projectData;
+    
+    showProjectDetail();
+    renderProjectDetails(projectData, isPublic);
+    renderTracks(projectData.tracks || [], !isPublic);
+    renderCuePoints(projectData.cuePoints || [], !isPublic);
+  } catch (error) {
+    console.error('Error loading project details:', error);
+    showMessage('Failed to load project details.', 'error');
+  }
+}
+
 async function createProject(event) {
   event.preventDefault();
   
@@ -174,11 +456,9 @@ async function createProject(event) {
   if (!name) return;
   
   try {
-    const response = await fetch('/api/projects', {
+    const response = await apiRequest('/api/my/projects', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
     });
     
@@ -187,16 +467,14 @@ async function createProject(event) {
     const newProject = await response.json();
     closeAllModals();
     nameInput.value = '';
-    
-    // Reload projects or add the new one to the list
-    loadProjects();
+    showMessage('Project created successfully!', 'success');
+    loadUserProjects();
   } catch (error) {
     console.error('Error creating project:', error);
-    showError('Failed to create project. Please try again.');
+    showMessage('Failed to create project.', 'error');
   }
 }
 
-// Update a project
 async function updateProject(event) {
   event.preventDefault();
   
@@ -207,11 +485,9 @@ async function updateProject(event) {
   if (!name || !projectId) return;
   
   try {
-    const response = await fetch(`/api/projects/${projectId}`, {
+    const response = await apiRequest(`/api/my/projects/${projectId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
     });
     
@@ -220,93 +496,79 @@ async function updateProject(event) {
     const updatedProject = await response.json();
     closeAllModals();
     
-    // Update project name if it's the current project
     if (currentProject && currentProject.id === projectId) {
       currentProject.name = name;
       projectNameElement.textContent = name;
     }
     
-    // Reload projects
-    loadProjects();
+    showMessage('Project updated successfully!', 'success');
+    loadUserProjects();
   } catch (error) {
     console.error('Error updating project:', error);
-    showError('Failed to update project. Please try again.');
+    showMessage('Failed to update project.', 'error');
   }
 }
 
-// Delete a project
-async function deleteProject(projectId) {
-  if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-    return;
-  }
+async function toggleProjectStatus() {
+  if (!currentProject) return;
+  
+  const newStatus = currentProject.status === 'draft' ? 'published' : 'draft';
   
   try {
-    const response = await fetch(`/api/projects/${projectId}`, {
-      method: 'DELETE'
+    const response = await apiRequest(`/api/my/projects/${currentProject.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
     });
     
-    if (!response.ok) throw new Error('Failed to delete project');
+    if (!response.ok) throw new Error('Failed to update project status');
     
-    // If the deleted project is the current one, go back to project list
-    if (currentProject && currentProject.id === projectId) {
-      showProjectList();
+    const updatedProject = await response.json();
+    currentProject.status = updatedProject.status;
+    currentProject.published_at = updatedProject.published_at;
+    
+    updateProjectStatusDisplay();
+    showMessage(`Project ${newStatus === 'published' ? 'published' : 'unpublished'} successfully!`, 'success');
+  } catch (error) {
+    console.error('Error updating project status:', error);
+    showMessage('Failed to update project status.', 'error');
+  }
+}
+
+async function deleteCurrentProject() {
+  if (!currentProject) return;
+  
+  showConfirmModal(
+    'Delete Project',
+    `Are you sure you want to delete "${currentProject.name}"? This action cannot be undone.`,
+    async () => {
+      try {
+        const response = await apiRequest(`/api/my/projects/${currentProject.id}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete project');
+        
+        showMessage('Project deleted successfully!', 'success');
+        showUserDashboard();
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        showMessage('Failed to delete project.', 'error');
+      }
     }
-    
-    // Reload projects
-    loadProjects();
-  } catch (error) {
-    console.error('Error deleting project:', error);
-    showError('Failed to delete project. Please try again.');
-  }
+  );
 }
 
-// Load project details
-async function loadProjectDetails(projectId) {
-  try {
-    const response = await fetch(`/api/projects/${projectId}`);
-    if (!response.ok) throw new Error('Failed to load project details');
-    
-    const projectData = await response.json();
-    
-    // Find the project in the list to get its name
-    const projectsResponse = await fetch('/api/projects');
-    const projects = await projectsResponse.json();
-    const project = projects.find(p => p.id === projectId);
-    
-    if (!project) throw new Error('Project not found');
-    
-    // Set current project
-    currentProject = {
-      id: projectId,
-      name: project.name,
-      ...projectData
-    };
-    
-    // Show project details view
-    showProjectDetails();
-    
-    // Render tracks and cue points
-    renderTracks(projectData.tracks);
-    renderCuePoints(projectData.cuePoints);
-  } catch (error) {
-    console.error('Error loading project details:', error);
-    showError('Failed to load project details. Please try again.');
-  }
-}
-
-// Upload tracks
 async function uploadTracks() {
   if (!currentProject || !trackUploadInput.files.length) return;
   
   const formData = new FormData();
-  
-  // Add all selected files to the form data
   for (let i = 0; i < trackUploadInput.files.length; i++) {
     formData.append('tracks', trackUploadInput.files[i]);
   }
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/tracks`, {
+    const response = await apiRequest(`/api/my/projects/${currentProject.id}/tracks`, {
       method: 'POST',
       body: formData
     });
@@ -314,54 +576,48 @@ async function uploadTracks() {
     if (!response.ok) throw new Error('Failed to upload tracks');
     
     const uploadedTracks = await response.json();
+    currentProject.tracks = [...(currentProject.tracks || []), ...uploadedTracks];
     
-    // Add new tracks to the current project
-    currentProject.tracks = [...currentProject.tracks, ...uploadedTracks];
-    
-    // Render updated tracks
-    renderTracks(currentProject.tracks);
-    
-    // Reset file input
+    renderTracks(currentProject.tracks, true);
     trackUploadInput.value = '';
+    showMessage('Tracks uploaded successfully!', 'success');
   } catch (error) {
     console.error('Error uploading tracks:', error);
-    showError('Failed to upload tracks. Please try again.');
+    showMessage('Failed to upload tracks.', 'error');
   }
 }
 
-// Delete a track
 async function deleteTrack(trackId) {
   if (!currentProject) return;
   
-  if (!confirm('Are you sure you want to delete this track? This action cannot be undone.')) {
-    return;
-  }
-  
-  try {
-    const response = await fetch(`/api/projects/${currentProject.id}/tracks/${trackId}`, {
-      method: 'DELETE'
-    });
-    
-    if (!response.ok) throw new Error('Failed to delete track');
-    
-    // Remove track from current project
-    currentProject.tracks = currentProject.tracks.filter(t => t.id !== trackId);
-    
-    // If the deleted track is the current one, stop playback
-    if (currentTrack && currentTrack.id === trackId) {
-      stopAudio();
-      currentTrack = null;
+  showConfirmModal(
+    'Delete Track',
+    'Are you sure you want to delete this track?',
+    async () => {
+      try {
+        const response = await apiRequest(`/api/my/projects/${currentProject.id}/tracks/${trackId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete track');
+        
+        currentProject.tracks = currentProject.tracks.filter(t => t.id !== trackId);
+        
+        if (currentTrack && currentTrack.id === trackId) {
+          stopAudio();
+          currentTrack = null;
+        }
+        
+        renderTracks(currentProject.tracks, true);
+        showMessage('Track deleted successfully!', 'success');
+      } catch (error) {
+        console.error('Error deleting track:', error);
+        showMessage('Failed to delete track.', 'error');
+      }
     }
-    
-    // Render updated tracks
-    renderTracks(currentProject.tracks);
-  } catch (error) {
-    console.error('Error deleting track:', error);
-    showError('Failed to delete track. Please try again.');
-  }
+  );
 }
 
-// Create a cue point
 async function createCuePoint(event) {
   event.preventDefault();
   
@@ -373,11 +629,9 @@ async function createCuePoint(event) {
   if (isNaN(time) || time < 0) return;
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues`, {
+    const response = await apiRequest(`/api/my/projects/${currentProject.id}/cues`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ time })
     });
     
@@ -387,26 +641,23 @@ async function createCuePoint(event) {
     closeAllModals();
     timeInput.value = '';
     
-    // Add new cue point to the current project
+    currentProject.cuePoints = currentProject.cuePoints || [];
     currentProject.cuePoints.push(newCuePoint);
-    
-    // Sort cue points by time
     currentProject.cuePoints.sort((a, b) => a.time - b.time);
     
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
+    renderCuePoints(currentProject.cuePoints, true);
     
-    // Update upcoming cue points if playing
     if (isPlaying) {
       updateUpcomingCuePoints();
     }
+    
+    showMessage('Cue point added successfully!', 'success');
   } catch (error) {
     console.error('Error creating cue point:', error);
-    showError('Failed to create cue point. Please try again.');
+    showMessage('Failed to create cue point.', 'error');
   }
 }
 
-// Update a cue point
 async function updateCuePoint(event) {
   event.preventDefault();
   
@@ -419,11 +670,9 @@ async function updateCuePoint(event) {
   if (!cueId || isNaN(time) || time < 0) return;
   
   try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues/${cueId}`, {
+    const response = await apiRequest(`/api/my/projects/${currentProject.id}/cues/${cueId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ time })
     });
     
@@ -432,86 +681,132 @@ async function updateCuePoint(event) {
     const updatedCuePoint = await response.json();
     closeAllModals();
     
-    // Update cue point in the current project
     const index = currentProject.cuePoints.findIndex(c => c.id === cueId);
     if (index !== -1) {
       currentProject.cuePoints[index] = updatedCuePoint;
     }
     
-    // Sort cue points by time
     currentProject.cuePoints.sort((a, b) => a.time - b.time);
+    renderCuePoints(currentProject.cuePoints, true);
     
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
-    
-    // Update upcoming cue points if playing
     if (isPlaying) {
       updateUpcomingCuePoints();
     }
+    
+    showMessage('Cue point updated successfully!', 'success');
   } catch (error) {
     console.error('Error updating cue point:', error);
-    showError('Failed to update cue point. Please try again.');
+    showMessage('Failed to update cue point.', 'error');
   }
 }
 
-// Delete a cue point
 async function deleteCuePoint(cueId) {
   if (!currentProject) return;
   
-  if (!confirm('Are you sure you want to delete this cue point?')) {
-    return;
-  }
-  
-  try {
-    const response = await fetch(`/api/projects/${currentProject.id}/cues/${cueId}`, {
-      method: 'DELETE'
-    });
-    
-    if (!response.ok) throw new Error('Failed to delete cue point');
-    
-    // Remove cue point from current project
-    currentProject.cuePoints = currentProject.cuePoints.filter(c => c.id !== cueId);
-    
-    // Render updated cue points
-    renderCuePoints(currentProject.cuePoints);
-    
-    // Update upcoming cue points if playing
-    if (isPlaying) {
-      updateUpcomingCuePoints();
+  showConfirmModal(
+    'Delete Cue Point',
+    'Are you sure you want to delete this cue point?',
+    async () => {
+      try {
+        const response = await apiRequest(`/api/my/projects/${currentProject.id}/cues/${cueId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete cue point');
+        
+        currentProject.cuePoints = currentProject.cuePoints.filter(c => c.id !== cueId);
+        renderCuePoints(currentProject.cuePoints, true);
+        
+        if (isPlaying) {
+          updateUpcomingCuePoints();
+        }
+        
+        showMessage('Cue point deleted successfully!', 'success');
+      } catch (error) {
+        console.error('Error deleting cue point:', error);
+        showMessage('Failed to delete cue point.', 'error');
+      }
     }
-  } catch (error) {
-    console.error('Error deleting cue point:', error);
-    showError('Failed to delete cue point. Please try again.');
-  }
+  );
 }
 
-// UI Functions
+// Rendering Functions
 
-// Render projects list
-function renderProjects(projects) {
-  // Clear container
-  projectsContainer.innerHTML = '';
+function renderPublicProjects(groupedProjects) {
+  publicProjectsContainer.innerHTML = '';
   
-  if (projects.length === 0) {
-    projectsContainer.innerHTML = '<div class="empty-message">No projects yet. Create one to get started!</div>';
+  const usernames = Object.keys(groupedProjects);
+  if (usernames.length === 0) {
+    publicProjectsContainer.innerHTML = '<div class="empty-message">No public projects available yet.</div>';
     return;
   }
   
-  // Sort projects by creation date (newest first)
-  projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  usernames.sort().forEach(username => {
+    const userSection = document.createElement('div');
+    userSection.className = 'user-section';
+    
+    const userHeader = document.createElement('h3');
+    userHeader.className = 'user-header';
+    userHeader.textContent = `Music by ${username}`;
+    userSection.appendChild(userHeader);
+    
+    const projectsGrid = document.createElement('div');
+    projectsGrid.className = 'projects-grid';
+    
+    groupedProjects[username].forEach(project => {
+      const projectCard = document.createElement('div');
+      projectCard.className = 'project-card';
+      
+      const publishedDate = new Date(project.published_at).toLocaleDateString();
+      
+      projectCard.innerHTML = `
+        <div class="project-card-header">
+          <h4>${escapeHtml(project.name)}</h4>
+          <span class="published-date">Published ${publishedDate}</span>
+        </div>
+        <div class="project-card-actions">
+          <button class="play-project-btn">
+            <i class="fas fa-play"></i> Listen
+          </button>
+        </div>
+      `;
+      
+      projectCard.querySelector('.play-project-btn').addEventListener('click', () => {
+        loadProjectDetails(project.id, true);
+      });
+      
+      projectsGrid.appendChild(projectCard);
+    });
+    
+    userSection.appendChild(projectsGrid);
+    publicProjectsContainer.appendChild(userSection);
+  });
+}
+
+function renderUserProjects(projects) {
+  userProjectsContainer.innerHTML = '';
   
-  // Create project items
+  if (projects.length === 0) {
+    userProjectsContainer.innerHTML = '<div class="empty-message">No projects yet. Create one to get started!</div>';
+    return;
+  }
+  
+  projects.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  
   projects.forEach(project => {
     const projectItem = document.createElement('div');
     projectItem.className = 'project-item';
     
-    const date = new Date(project.createdAt);
-    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    const createdDate = new Date(project.created_at).toLocaleDateString();
+    const statusClass = project.status === 'published' ? 'published' : 'draft';
     
     projectItem.innerHTML = `
       <div class="project-info">
         <div class="project-name">${escapeHtml(project.name)}</div>
-        <div class="project-date">Created: ${formattedDate}</div>
+        <div class="project-meta">
+          <span class="project-date">Created: ${createdDate}</span>
+          <span class="status-badge ${statusClass}">${project.status}</span>
+        </div>
       </div>
       <div class="project-actions">
         <button class="edit-btn" title="Edit Project"><i class="fas fa-edit"></i></button>
@@ -519,41 +814,74 @@ function renderProjects(projects) {
       </div>
     `;
     
-    // Add click event to open project
     projectItem.addEventListener('click', (e) => {
-      // Don't open if clicking on action buttons
       if (e.target.closest('.project-actions')) return;
-      
-      loadProjectDetails(project.id);
+      loadProjectDetails(project.id, false);
     });
     
-    // Add edit button event
     projectItem.querySelector('.edit-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       showEditProjectModal(project);
     });
     
-    // Add delete button event
     projectItem.querySelector('.delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      deleteProject(project.id);
+      deleteProjectById(project.id);
     });
     
-    projectsContainer.appendChild(projectItem);
+    userProjectsContainer.appendChild(projectItem);
   });
 }
 
-// Render tracks list
-function renderTracks(tracks) {
-  // Clear container
+function renderProjectDetails(project, isPublic) {
+  projectNameElement.textContent = project.name;
+  
+  if (project.username) {
+    creatorNameElement.textContent = project.username;
+    document.getElementById('project-creator').classList.remove('hidden');
+  } else {
+    document.getElementById('project-creator').classList.add('hidden');
+  }
+  
+  updateProjectStatusDisplay();
+  
+  // Show/hide controls based on ownership
+  if (isPublic || !currentUser || (currentUser && project.user_id !== currentUser.id)) {
+    projectControlsElement.classList.add('hidden');
+    uploadTrackBtn.classList.add('hidden');
+    addCueBtn.classList.add('hidden');
+  } else {
+    projectControlsElement.classList.remove('hidden');
+    uploadTrackBtn.classList.remove('hidden');
+    addCueBtn.classList.remove('hidden');
+  }
+}
+
+function updateProjectStatusDisplay() {
+  if (!currentProject) return;
+  
+  const statusClass = currentProject.status === 'published' ? 'published' : 'draft';
+  projectStatusElement.className = `status-badge ${statusClass}`;
+  projectStatusElement.textContent = currentProject.status;
+  
+  const toggleBtn = document.getElementById('toggle-status-btn');
+  const toggleText = document.getElementById('status-toggle-text');
+  
+  if (currentProject.status === 'published') {
+    toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> <span id="status-toggle-text">Unpublish</span>';
+  } else {
+    toggleBtn.innerHTML = '<i class="fas fa-eye"></i> <span id="status-toggle-text">Publish</span>';
+  }
+}
+
+function renderTracks(tracks, canEdit) {
   tracksContainer.innerHTML = '';
   
   if (!tracks || tracks.length === 0) {
-    tracksContainer.innerHTML = '<div class="empty-message">No tracks yet. Upload some to get started!</div>';
+    tracksContainer.innerHTML = '<div class="empty-message">No tracks yet.</div>';
     return;
   }
   
-  // Create track items
   tracks.forEach(track => {
     const trackItem = document.createElement('div');
     trackItem.className = 'track-item';
@@ -567,43 +895,41 @@ function renderTracks(tracks) {
           <i class="fas fa-play"></i>
         </button>
         <div>
-          <div class="track-name">${escapeHtml(track.originalName)}</div>
+          <div class="track-name">${escapeHtml(track.original_name)}</div>
           <div class="track-duration">${duration}</div>
         </div>
       </div>
-      <div class="track-actions">
-        <button class="delete-btn" title="Delete Track"><i class="fas fa-trash"></i></button>
-      </div>
+      ${canEdit ? `
+        <div class="track-actions">
+          <button class="delete-btn" title="Delete Track"><i class="fas fa-trash"></i></button>
+        </div>
+      ` : ''}
     `;
     
-    // Add play button event
     trackItem.querySelector('.track-play-btn').addEventListener('click', () => {
       playTrack(track);
     });
     
-    // Add delete button event
-    trackItem.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteTrack(track.id);
-    });
+    if (canEdit) {
+      trackItem.querySelector('.delete-btn').addEventListener('click', () => {
+        deleteTrack(track.id);
+      });
+    }
     
     tracksContainer.appendChild(trackItem);
   });
 }
 
-// Render cue points list
-function renderCuePoints(cuePoints) {
-  // Clear container
+function renderCuePoints(cuePoints, canEdit) {
   cuesContainer.innerHTML = '';
   
   if (!cuePoints || cuePoints.length === 0) {
-    cuesContainer.innerHTML = '<div class="empty-message">No cue points yet. Add some to enable track switching!</div>';
+    cuesContainer.innerHTML = '<div class="empty-message">No cue points yet.</div>';
     return;
   }
   
-  // Sort cue points by time
   cuePoints.sort((a, b) => a.time - b.time);
   
-  // Create cue point items
   cuePoints.forEach(cue => {
     if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
     const cueItem = document.createElement('div');
@@ -614,55 +940,31 @@ function renderCuePoints(cuePoints) {
     cueItem.innerHTML = `
       <span class="cue-color" style="background-color: ${cueColors[cue.id]}"></span>
       <div class="cue-time">${formattedTime}</div>
-      <div class="cue-actions">
-        <button class="edit-btn" title="Edit Cue Point"><i class="fas fa-edit"></i></button>
-        <button class="delete-btn" title="Delete Cue Point"><i class="fas fa-trash"></i></button>
-      </div>
+      ${canEdit ? `
+        <div class="cue-actions">
+          <button class="edit-btn" title="Edit Cue Point"><i class="fas fa-edit"></i></button>
+          <button class="delete-btn" title="Delete Cue Point"><i class="fas fa-trash"></i></button>
+        </div>
+      ` : ''}
     `;
     
-    // Add edit button event
-    cueItem.querySelector('.edit-btn').addEventListener('click', () => {
-      showEditCueModal(cue);
-    });
-    
-    // Add delete button event
-    cueItem.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteCuePoint(cue.id);
-    });
+    if (canEdit) {
+      cueItem.querySelector('.edit-btn').addEventListener('click', () => {
+        showEditCueModal(cue);
+      });
+      
+      cueItem.querySelector('.delete-btn').addEventListener('click', () => {
+        deleteCuePoint(cue.id);
+      });
+    }
     
     cuesContainer.appendChild(cueItem);
   });
   updateCueTimeline();
 }
 
-// Show project list view
-function showProjectList() {
-  // Stop any playing audio
-  stopAudio();
-  
-  // Reset current project
-  currentProject = null;
-  
-  // Show project list, hide project details
-  projectListView.classList.remove('hidden');
-  projectDetailView.classList.add('hidden');
-  backButton.classList.add('hidden');
-}
+// Modal Functions
 
-// Show project details view
-function showProjectDetails() {
-  if (!currentProject) return;
-  
-  // Update project name
-  projectNameElement.textContent = currentProject.name;
-  
-  // Hide project list, show project details
-  projectListView.classList.add('hidden');
-  projectDetailView.classList.remove('hidden');
-  backButton.classList.remove('hidden');
-}
-
-// Modal functions
 function showCreateProjectModal() {
   createProjectModal.classList.remove('hidden');
   overlay.classList.remove('hidden');
@@ -670,6 +972,10 @@ function showCreateProjectModal() {
 }
 
 function showEditProjectModal(project) {
+  if (!project && currentProject) {
+    project = currentProject;
+  }
+  
   document.getElementById('edit-project-id').value = project.id;
   document.getElementById('edit-project-name-input').value = project.name;
   
@@ -693,65 +999,67 @@ function showEditCueModal(cue) {
   document.getElementById('edit-cue-time-input').focus();
 }
 
+function showConfirmModal(title, message, onConfirm) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  
+  const confirmBtn = document.getElementById('confirm-ok');
+  confirmBtn.onclick = () => {
+    closeAllModals();
+    onConfirm();
+  };
+  
+  confirmModal.classList.remove('hidden');
+  overlay.classList.remove('hidden');
+}
+
 function closeAllModals() {
   createProjectModal.classList.add('hidden');
   editProjectModal.classList.add('hidden');
   addCueModal.classList.add('hidden');
   editCueModal.classList.add('hidden');
+  confirmModal.classList.add('hidden');
   overlay.classList.add('hidden');
 }
 
 // Audio Player Functions
 
-// Play a specific track
 function playTrack(track) {
   if (!track) return;
   
-  // Set current track
   currentTrack = track;
-  
-  // Update audio source
   audioPlayer.src = `/projects/${currentProject.id}/audio/${track.id}.mp3`;
+  currentTrackNameElement.textContent = track.original_name;
   
-  // Update UI
-  currentTrackNameElement.textContent = track.originalName;
-  
-  // Play audio
   playAudio();
 }
 
-// Play audio
 function playAudio() {
-  if (!currentProject || !currentProject.tracks.length) {
-    showError('No tracks available to play.');
+  if (!currentProject || !currentProject.tracks || !currentProject.tracks.length) {
+    showMessage('No tracks available to play.', 'error');
     return;
   }
   
-  // If no track is selected, pick a random one
   if (!currentTrack) {
     const randomIndex = Math.floor(Math.random() * currentProject.tracks.length);
     currentTrack = currentProject.tracks[randomIndex];
     audioPlayer.src = `/projects/${currentProject.id}/audio/${currentTrack.id}.mp3`;
-    currentTrackNameElement.textContent = currentTrack.originalName;
+    currentTrackNameElement.textContent = currentTrack.original_name;
   }
   
-  // Play audio
   audioPlayer.play()
     .then(() => {
       isPlaying = true;
       playButton.classList.add('hidden');
       pauseButton.classList.remove('hidden');
-      
-      // Update upcoming cue points
       updateUpcomingCuePoints();
     })
     .catch(error => {
       console.error('Error playing audio:', error);
-      showError('Failed to play audio. Please try again.');
+      showMessage('Failed to play audio. Please try again.', 'error');
     });
 }
 
-// Pause audio
 function pauseAudio() {
   audioPlayer.pause();
   isPlaying = false;
@@ -759,7 +1067,6 @@ function pauseAudio() {
   playButton.classList.remove('hidden');
 }
 
-// Stop audio
 function stopAudio() {
   audioPlayer.pause();
   audioPlayer.currentTime = 0;
@@ -770,31 +1077,28 @@ function stopAudio() {
   currentTimeElement.textContent = '0:00';
 }
 
- // Seek audio to a specific position
- function seekAudio(event) {
-   if (!audioPlayer.duration) return;
-   
-   const rect = progressBar.getBoundingClientRect();
-   const pos = (event.clientX - rect.left) / rect.width;
-   const newTime = Math.max(0, Math.min(1, pos)) * audioPlayer.duration;
-   audioPlayer.currentTime = newTime;
-   
-   // Cue-point-aware seek
-   if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
-     const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
-     if (newTime >= sorted[0].time) {
-       switchToRandomTrack();
-       return;
-     }
-   }
-   // Update upcoming cue points after seeking
-   if (isPlaying) {
-     updateUpcomingCuePoints();
-     updateCueTimeline();
-   }
- }
+function seekAudio(event) {
+  if (!audioPlayer.duration) return;
+  
+  const rect = progressBar.getBoundingClientRect();
+  const pos = (event.clientX - rect.left) / rect.width;
+  const newTime = Math.max(0, Math.min(1, pos)) * audioPlayer.duration;
+  audioPlayer.currentTime = newTime;
+  
+  if (currentProject && currentProject.cuePoints && currentProject.cuePoints.length) {
+    const sorted = currentProject.cuePoints.slice().sort((a, b) => a.time - b.time);
+    if (newTime >= sorted[0].time) {
+      switchToRandomTrack();
+      return;
+    }
+  }
+  
+  if (isPlaying) {
+    updateUpcomingCuePoints();
+    updateCueTimeline();
+  }
+}
 
-// Update progress bar and time display
 function updateProgress() {
   if (isDragging) return;
   if (!audioPlayer.duration) return;
@@ -802,78 +1106,55 @@ function updateProgress() {
   const currentTime = audioPlayer.currentTime;
   const duration = audioPlayer.duration;
   
-  // Update progress bar
   const progress = (currentTime / duration) * 100;
   progressIndicator.style.width = `${progress}%`;
   progressHandle.style.left = `${progress}%`;
-  // Update cue playback indicator
   cuePlaybackIndicator.style.width = `${progress}%`;
   
-  // Update time display
   currentTimeElement.textContent = formatTime(currentTime);
   
-  // Check for cue points
   checkCuePoints();
 }
 
-// Update total time display
 function updateTotalTime() {
   if (!audioPlayer.duration) return;
-  
   totalTimeElement.textContent = formatTime(audioPlayer.duration);
 }
 
-// Handle track end
 function handleTrackEnd() {
-  // Switch to a random track
   switchToRandomTrack();
 }
 
-// Update the list of upcoming cue points
 function updateUpcomingCuePoints() {
-  if (!currentProject || !currentProject.cuePoints.length || !isPlaying) {
+  if (!currentProject || !currentProject.cuePoints || !currentProject.cuePoints.length || !isPlaying) {
     upcomingCuePoints = [];
     return;
   }
   
   const currentTime = audioPlayer.currentTime;
-  
-  // Filter cue points that are ahead of current time
   upcomingCuePoints = currentProject.cuePoints
     .filter(cue => cue.time > currentTime)
     .sort((a, b) => a.time - b.time);
 }
 
-// Check if we've reached a cue point
 function checkCuePoints() {
-  // Add check for audioPlayer readiness state > 0 to avoid checks before metadata is loaded
-  // Also check if upcomingCuePoints actually has items before accessing index 0
   if (!isPlaying || !upcomingCuePoints.length || isTrackSwitching || audioPlayer.readyState === 0) return;
 
   const currentTime = audioPlayer.currentTime;
 
-  // Check if we've passed the next cue point
-  // Use >= comparison for robustness
   if (currentTime >= upcomingCuePoints[0].time) {
-    const passedCuePoint = upcomingCuePoints.shift(); // Store the passed cue point for potential logging
+    const passedCuePoint = upcomingCuePoints.shift();
     console.log(`Passed cue point at ${passedCuePoint.time}s`);
-
-    // Switch to a random track
     switchToRandomTrack();
-
-    // DO NOT updateUpcomingCuePoints() here. It will be updated after the switch completes.
   }
 }
 
-
-// Switch to a random track
 function switchToRandomTrack() {
-  // Ensure only one switch happens at a time
   if (isTrackSwitching) {
     console.log('Track switch already in progress, skipping.');
     return;
   }
-  if (!currentProject || !currentProject.tracks.length) {
+  if (!currentProject || !currentProject.tracks || !currentProject.tracks.length) {
     console.log('No project or tracks available for switching.');
     return;
   }
@@ -887,57 +1168,48 @@ function switchToRandomTrack() {
     if (!availableTracks.length) {
       console.log('No other tracks available, continuing current track.');
       isTrackSwitching = false;
-      // If only one track, we might need to reset upcomingCuePoints if it's empty now
-      // or if the loop should stop. Let's re-evaluate from current time.
       updateUpcomingCuePoints();
       return;
     }
 
     const randomIndex = Math.floor(Math.random() * availableTracks.length);
     const newTrack = availableTracks[randomIndex];
-    const previousTime = audioPlayer.currentTime; // Store time *before* changing src
+    const previousTime = audioPlayer.currentTime;
 
-    console.log(`Switching from ${currentTrack?.originalName || 'None'} to track: ${newTrack.originalName} at time ${previousTime.toFixed(2)}s`);
+    console.log(`Switching from ${currentTrack?.original_name || 'None'} to track: ${newTrack.original_name} at time ${previousTime.toFixed(2)}s`);
 
     currentTrack = newTrack;
     audioPlayer.src = `/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
-    currentTrackNameElement.textContent = newTrack.originalName;
+    currentTrackNameElement.textContent = newTrack.original_name;
 
-    // Use { once: true } for safety to ensure listeners don't stack up
     audioPlayer.addEventListener('loadedmetadata', function onMetadataLoaded() {
-      console.log(`Metadata loaded for ${newTrack.originalName}. Duration: ${audioPlayer.duration.toFixed(2)}s`);
+      console.log(`Metadata loaded for ${newTrack.original_name}. Duration: ${audioPlayer.duration.toFixed(2)}s`);
       try {
-        // Clamp seekTime to the new track's duration
         const seekTime = Math.min(previousTime, audioPlayer.duration);
-        console.log(`Seeking ${newTrack.originalName} to: ${seekTime.toFixed(2)}s`);
-        // Setting currentTime can sometimes throw an error if the state is wrong
-        if (audioPlayer.readyState >= 1) { // HAVE_METADATA or higher
-             audioPlayer.currentTime = seekTime;
+        console.log(`Seeking ${newTrack.original_name} to: ${seekTime.toFixed(2)}s`);
+        
+        if (audioPlayer.readyState >= 1) {
+          audioPlayer.currentTime = seekTime;
         } else {
-             console.warn('Audio not ready for seeking, playback might start from 0.');
+          console.warn('Audio not ready for seeking, playback might start from 0.');
         }
 
-
-        // Ensure we are still supposed to be playing
         if (!isPlaying) {
-           console.log('Playback was stopped during track switch. Aborting play.');
-           updateUpcomingCuePoints(); // Update cues even if not playing now
-           isTrackSwitching = false;
-           return;
+          console.log('Playback was stopped during track switch. Aborting play.');
+          updateUpcomingCuePoints();
+          isTrackSwitching = false;
+          return;
         }
 
         audioPlayer.play()
           .then(() => {
-            console.log(`Playback started for ${newTrack.originalName} at ${audioPlayer.currentTime.toFixed(2)}s`);
-            // Update upcoming cue points *after* successful playback start
+            console.log(`Playback started for ${newTrack.original_name} at ${audioPlayer.currentTime.toFixed(2)}s`);
             updateUpcomingCuePoints();
-            // Reset the flag *after* everything is done
             isTrackSwitching = false;
             console.log('Track switch complete.');
           })
           .catch(error => {
             console.error('Error playing audio after switch:', error);
-            // Still update cues and reset flag on error
             updateUpcomingCuePoints();
             isTrackSwitching = false;
           });
@@ -946,66 +1218,28 @@ function switchToRandomTrack() {
         updateUpcomingCuePoints();
         isTrackSwitching = false;
       }
-    }, { once: true }); // Use once: true
+    }, { once: true });
 
     audioPlayer.addEventListener('error', function onError(e) {
       console.error(`Error loading audio source ${audioPlayer.src}:`, audioPlayer.error, e);
-      // Reset flag and update cues if loading fails
       updateUpcomingCuePoints();
       isTrackSwitching = false;
-    }, { once: true }); // Use once: true
+    }, { once: true });
 
   } catch (error) {
     console.error('Error during track switch setup:', error);
-    // Reset flag if setup fails
-    updateUpcomingCuePoints(); // Try to update cues anyway
+    updateUpcomingCuePoints();
     isTrackSwitching = false;
   }
 }
 
-// Utility Functions
-
-// Format time in seconds to MM:SS.ss format
-function formatTime(seconds) {
-  if (isNaN(seconds) || seconds < 0) return '0:00.00';
-
-  const totalSeconds = seconds; // Keep the original value with decimals
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainingSeconds = (totalSeconds % 60).toFixed(2); // Get seconds with 2 decimal places
-
-  // Pad the whole seconds part if needed (e.g., 5.50 -> 05.50)
-  const paddedSeconds = remainingSeconds.padStart(5, '0'); // 5 characters for "SS.ss" (e.g., "05.50")
-
-  return `${minutes}:${paddedSeconds}`;
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(unsafe) {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-// Show error message
-function showError(message) {
-  alert(message);
-}
-
-// Generate a random hex color
-function getRandomColor() {
-  return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-}
-
-// Update the cue point timeline display
 function updateCueTimeline() {
   if (!currentProject) {
     cuePointsContainer.innerHTML = '';
     cuePlaybackIndicator.style.width = '0%';
     return;
   }
+  
   let duration = audioPlayer.duration;
   if (!duration && currentProject.tracks && currentProject.tracks.length) {
     duration = currentProject.tracks[0].duration;
@@ -1015,45 +1249,114 @@ function updateCueTimeline() {
     cuePlaybackIndicator.style.width = '0%';
     return;
   }
+  
   cuePointsContainer.innerHTML = '';
-  currentProject.cuePoints.forEach(cue => {
-    if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
-    const dot = document.createElement('div');
-    dot.className = 'cue-point';
-    dot.style.left = (cue.time / duration * 100) + '%';
-    dot.style.backgroundColor = cueColors[cue.id];
-    dot.addEventListener('mousedown', (e) => {
-      draggingCueId = cue.id;
-      e.preventDefault();
+  if (currentProject.cuePoints) {
+    currentProject.cuePoints.forEach(cue => {
+      if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
+      const dot = document.createElement('div');
+      dot.className = 'cue-point';
+      dot.style.left = (cue.time / duration * 100) + '%';
+      dot.style.backgroundColor = cueColors[cue.id];
+      dot.addEventListener('mousedown', (e) => {
+        draggingCueId = cue.id;
+        e.preventDefault();
+      });
+      cuePointsContainer.appendChild(dot);
     });
-    cuePointsContainer.appendChild(dot);
-  });
+  }
+  
   const progress = (audioPlayer.currentTime / duration) * 100;
   cuePlaybackIndicator.style.width = progress + '%';
 }
 
-// Global mouse events for dragging cue points
-document.addEventListener('mousemove', (e) => {
+function handleCueDrag(e) {
   if (!draggingCueId) return;
   const rect = cueTimeline.getBoundingClientRect();
   let pos = (e.clientX - rect.left) / rect.width;
   pos = Math.max(0, Math.min(1, pos));
   const duration = audioPlayer.duration || (currentProject && currentProject.tracks && currentProject.tracks.length > 0 ? currentProject.tracks[0].duration : 0);
-  if (!duration) return; // If no duration, can't calculate newTime
+  if (!duration) return;
   const newTime = pos * duration;
   const cue = currentProject.cuePoints.find(c => c.id === draggingCueId);
   if (cue) cue.time = newTime;
   updateCueTimeline();
-});
+}
 
-document.addEventListener('mouseup', () => {
+function handleCueDragEnd() {
   if (!draggingCueId) return;
   const id = draggingCueId;
   draggingCueId = null;
-  fetch(`/api/projects/${currentProject.id}/cues/${id}`, {
+  
+  apiRequest(`/api/my/projects/${currentProject.id}/cues/${id}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ time: currentProject.cuePoints.find(c => c.id === id).time })
   }).catch(err => console.error('Cue drag update failed', err));
-  renderCuePoints(currentProject.cuePoints);
-});
+  
+  renderCuePoints(currentProject.cuePoints, true);
+}
+
+// Helper Functions
+
+async function deleteProjectById(projectId) {
+  showConfirmModal(
+    'Delete Project',
+    'Are you sure you want to delete this project? This action cannot be undone.',
+    async () => {
+      try {
+        const response = await apiRequest(`/api/my/projects/${projectId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete project');
+        
+        showMessage('Project deleted successfully!', 'success');
+        loadUserProjects();
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        showMessage('Failed to delete project.', 'error');
+      }
+    }
+  );
+}
+
+function showMessage(message, type = 'info') {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `message ${type}`;
+  messageDiv.textContent = message;
+  
+  messageContainer.appendChild(messageDiv);
+  
+  setTimeout(() => {
+    messageDiv.classList.add('fade-out');
+    setTimeout(() => {
+      if (messageContainer.contains(messageDiv)) {
+        messageContainer.removeChild(messageDiv);
+      }
+    }, 300);
+  }, 3000);
+}
+
+function formatTime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  const paddedSeconds = remainingSeconds.toString().padStart(2, '0');
+
+  return `${minutes}:${paddedSeconds}`;
+}
+
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getRandomColor() {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+}

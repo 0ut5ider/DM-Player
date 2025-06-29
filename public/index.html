@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DM Player</title>
+    <title>DM Player - Open Music Library</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
@@ -13,31 +13,136 @@
         <header>
             <div class="title-container">
                 <h1>DM Player</h1>
-                <span id="app-version" class="app-version-text"></span>
+                <span class="subtitle">Open Music Library</span>
             </div>
-            <div id="navigation">
-                <button id="back-button" class="hidden"><i class="fas fa-arrow-left"></i> Back to Projects</button>
-            </div>
+            <nav id="main-navigation">
+                <!-- Anonymous Navigation -->
+                <div id="anonymous-nav" class="nav-section">
+                    <button id="browse-public-btn" class="nav-button active">
+                        <i class="fas fa-music"></i> Browse Music
+                    </button>
+                    <button id="show-login-btn" class="nav-button">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                    <button id="show-register-btn" class="nav-button">
+                        <i class="fas fa-user-plus"></i> Register
+                    </button>
+                </div>
+                
+                <!-- Authenticated Navigation -->
+                <div id="authenticated-nav" class="nav-section hidden">
+                    <button id="browse-public-auth-btn" class="nav-button">
+                        <i class="fas fa-music"></i> Browse Music
+                    </button>
+                    <button id="my-projects-btn" class="nav-button">
+                        <i class="fas fa-folder"></i> My Projects
+                    </button>
+                    <span id="user-info" class="user-info">
+                        Welcome, <span id="username-display"></span>
+                    </span>
+                    <button id="logout-btn" class="nav-button">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </nav>
         </header>
 
-        <!-- Project List View -->
-        <div id="project-list-view">
+        <!-- Public Browse View -->
+        <div id="public-browse-view" class="main-view">
             <div class="section-header">
-                <h2>Projects</h2>
+                <h2>Public Music Library</h2>
+                <p class="subtitle-text">Discover music created by our community</p>
+            </div>
+            <div id="public-projects-container" class="public-projects-container">
+                <!-- Public projects grouped by user will be displayed here -->
+                <div class="loading-message">Loading public projects...</div>
+            </div>
+        </div>
+
+        <!-- Authentication Views -->
+        <div id="login-view" class="main-view auth-view hidden">
+            <div class="auth-container">
+                <h2>Login to Your Account</h2>
+                <form id="login-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="login-email">Email:</label>
+                        <input type="email" id="login-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password:</label>
+                        <input type="password" id="login-password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">Login</button>
+                    </div>
+                    <div class="auth-switch">
+                        Don't have an account? <a href="#" id="switch-to-register">Register here</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="register-view" class="main-view auth-view hidden">
+            <div class="auth-container">
+                <h2>Create Your Account</h2>
+                <form id="register-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="register-username">Username:</label>
+                        <input type="text" id="register-username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">Email:</label>
+                        <input type="email" id="register-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Password:</label>
+                        <input type="password" id="register-password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">Register</button>
+                    </div>
+                    <div class="auth-switch">
+                        Already have an account? <a href="#" id="switch-to-login">Login here</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- User Dashboard View -->
+        <div id="user-dashboard-view" class="main-view hidden">
+            <div class="section-header">
+                <h2>My Projects</h2>
                 <button id="create-project-btn" class="action-button">
                     <i class="fas fa-plus"></i> New Project
                 </button>
             </div>
-            <div id="projects-container" class="list-container">
-                <!-- Projects will be dynamically added here -->
+            <div id="user-projects-container" class="list-container">
+                <!-- User's projects will be displayed here -->
                 <div class="empty-message">No projects yet. Create one to get started!</div>
             </div>
         </div>
 
-        <!-- Project Detail View (hidden initially) -->
-        <div id="project-detail-view" class="hidden">
+        <!-- Project Detail View -->
+        <div id="project-detail-view" class="main-view hidden">
             <div class="project-info">
-                <h2 id="project-name">Project Name</h2>
+                <div class="project-header">
+                    <h2 id="project-name">Project Name</h2>
+                    <div class="project-meta">
+                        <span id="project-creator">by <span id="creator-name"></span></span>
+                        <span id="project-status" class="status-badge"></span>
+                    </div>
+                </div>
+                <div id="project-controls" class="project-controls hidden">
+                    <button id="edit-project-btn" class="action-button">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button id="toggle-status-btn" class="action-button">
+                        <i class="fas fa-eye"></i> <span id="status-toggle-text">Publish</span>
+                    </button>
+                    <button id="delete-project-btn" class="action-button danger">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
             </div>
 
             <!-- Player Controls -->
@@ -74,38 +179,41 @@
                 </div>
             </div>
 
-            <!-- Tracks Section -->
+            <!-- Tracks and Cue Points Section -->
             <div class="section-row">
                 <div class="section section-tracks">
-                <div class="section-header">
-                    <h3>Tracks</h3>
-                    <button id="upload-track-btn" class="action-button" title="Add Track">
-                        <i class="fas fa-plus"></i>
-                    </button>
+                    <div class="section-header">
+                        <h3>Tracks</h3>
+                        <button id="upload-track-btn" class="action-button hidden" title="Add Track">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="tracks-container" class="list-container">
+                        <!-- Tracks will be dynamically added here -->
+                        <div class="empty-message">No tracks yet.</div>
+                    </div>
+                    <input type="file" id="track-upload-input" accept=".mp3" multiple style="display: none;">
                 </div>
-                <div id="tracks-container" class="list-container">
-                    <!-- Tracks will be dynamically added here -->
-                    <div class="empty-message">No tracks yet. Upload some to get started!</div>
-                </div>
-                <input type="file" id="track-upload-input" accept=".mp3" multiple style="display: none;">
-            </div>
 
-            <!-- Cue Points Section -->
                 <div class="section section-cues">
-                <div class="section-header">
-                    <h3>Cue Points</h3>
-                    <button id="add-cue-btn" class="action-button" title="Add Cue Point">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                </div>
-                <div id="cues-container" class="list-container">
-                    <!-- Cue points will be dynamically added here -->
-                    <div class="empty-message">No cue points yet. Add some to enable track switching!</div>
+                    <div class="section-header">
+                        <h3>Cue Points</h3>
+                        <button id="add-cue-btn" class="action-button hidden" title="Add Cue Point">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="cues-container" class="list-container">
+                        <!-- Cue points will be dynamically added here -->
+                        <div class="empty-message">No cue points yet.</div>
+                    </div>
                 </div>
             </div>
-            </div> <!-- end section-row -->
-
         </div>
+
+        <!-- Back Button -->
+        <button id="back-button" class="back-button hidden">
+            <i class="fas fa-arrow-left"></i> Back
+        </button>
     </div>
 
     <!-- Modals -->
@@ -120,6 +228,23 @@
                 <div class="form-actions">
                     <button type="button" class="cancel-btn">Cancel</button>
                     <button type="submit" class="submit-btn">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-project-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Project</h3>
+            <form id="edit-project-form">
+                <input type="hidden" id="edit-project-id">
+                <div class="form-group">
+                    <label for="edit-project-name-input">Project Name:</label>
+                    <input type="text" id="edit-project-name-input" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Update</button>
                 </div>
             </form>
         </div>
@@ -158,20 +283,14 @@
         </div>
     </div>
 
-    <div id="edit-project-modal" class="modal hidden">
+    <div id="confirm-modal" class="modal hidden">
         <div class="modal-content">
-            <h3>Edit Project</h3>
-            <form id="edit-project-form">
-                <input type="hidden" id="edit-project-id">
-                <div class="form-group">
-                    <label for="edit-project-name-input">Project Name:</label>
-                    <input type="text" id="edit-project-name-input" required>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="cancel-btn">Cancel</button>
-                    <button type="submit" class="submit-btn">Update</button>
-                </div>
-            </form>
+            <h3 id="confirm-title">Confirm Action</h3>
+            <p id="confirm-message">Are you sure?</p>
+            <div class="form-actions">
+                <button type="button" id="confirm-cancel" class="cancel-btn">Cancel</button>
+                <button type="button" id="confirm-ok" class="submit-btn danger">Confirm</button>
+            </div>
         </div>
     </div>
 
@@ -179,6 +298,9 @@
 
     <!-- Audio Element (hidden) -->
     <audio id="audio-player"></audio>
+
+    <!-- Error/Success Messages -->
+    <div id="message-container" class="message-container"></div>
 
     <script src="app.js"></script>
 </body>

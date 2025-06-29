@@ -6,6 +6,7 @@
 - **Node.js**: Runtime environment for server-side JavaScript
 - **Express.js v5.1.0**: Web framework for RESTful API
 - **SQLite3 v5.1.7**: Embedded database for data persistence
+- **bcrypt**: Password hashing library for secure authentication
 - **Multer v1.4.5-lts.2**: Middleware for handling multipart/form-data (file uploads)
 - **music-metadata v11.2.1**: Library for extracting audio file metadata
 - **UUID v11.1.0**: Library for generating unique identifiers
@@ -28,20 +29,22 @@
 ### Production Dependencies
 ```json
 {
-  "express": "^5.1.0",           // Web server framework
+  "bcrypt": "^5.1.1",           // Password hashing for authentication
+  "express": "^5.1.0",          // Web server framework
   "multer": "^1.4.5-lts.2",     // File upload handling
-  "music-metadata": "^11.2.1",   // Audio metadata extraction
+  "music-metadata": "^11.2.1",  // Audio metadata extraction
   "sqlite3": "^5.1.7",          // Database engine
   "uuid": "^11.1.0"             // Unique ID generation
 }
 ```
 
 ### Key Dependency Purposes
+- **bcrypt**: Secure password hashing and verification for user authentication
 - **Express**: Handles HTTP routing, middleware, static file serving
 - **Multer**: Processes MP3 file uploads with validation and storage
 - **music-metadata**: Extracts duration and other metadata from audio files
 - **SQLite3**: Provides embedded database without external server requirements
-- **UUID**: Generates unique identifiers for projects, tracks, and cue points
+- **UUID**: Generates unique identifiers for users, projects, tracks, and cue points
 
 ## Development Setup
 
@@ -85,24 +88,44 @@ DM-Player/
 - **ES6+ JavaScript**: Modern browser features used throughout
 - **Fetch API**: Used for HTTP requests to backend
 - **File API**: Required for file upload functionality
+- **Local Storage**: Used for session token persistence
 
 ### System Requirements
 - **File System Access**: Local storage for MP3 files and database
 - **Network Access**: HTTP server on localhost
 - **Audio Codecs**: MP3 playback support in browser
 - **Memory**: Sufficient RAM for audio buffering and metadata processing
+- **Session Storage**: Browser local storage for authentication tokens
 
 ### Performance Considerations
 - **File Size Limits**: Multer configuration may limit upload sizes
-- **Concurrent Users**: Single-user application (no authentication/sessions)
-- **Database Size**: SQLite suitable for moderate data volumes
+- **Concurrent Users**: Multi-user application with session management
+- **Database Size**: SQLite suitable for moderate multi-user data volumes
 - **Audio Streaming**: Browser handles audio buffering and streaming
+- **Session Management**: 7-day session expiration with automatic cleanup
 
 ## Configuration Patterns
 
 ### Environment Variables
 - **PORT**: Server port (default: 3001)
 - **NODE_ENV**: Environment mode (development/production)
+
+### Authentication Configuration
+```javascript
+// Password hashing
+const saltRounds = 10;
+const passwordHash = await bcrypt.hash(password, saltRounds);
+
+// Session management
+const sessionId = uuidv4();
+const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+// Authentication middleware
+const authenticateUser = (req, res, next) => {
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+  // Validate session against database
+};
+```
 
 ### File Upload Configuration
 ```javascript
@@ -112,7 +135,7 @@ const storage = multer.diskStorage({
   filename: '{uuid}.mp3'
 });
 
-// File filtering
+// File filtering with security
 fileFilter: (req, file, cb) => {
   if (file.mimetype !== 'audio/mpeg') {
     return cb(new Error('Only MP3 files allowed'), false);
@@ -123,13 +146,14 @@ fileFilter: (req, file, cb) => {
 
 ### Database Configuration
 ```javascript
-// SQLite connection
+// SQLite connection with multi-user schema
 const dbPath = path.resolve(__dirname, 'dm_player.sqlite');
 const db = new sqlite3.Database(dbPath);
 
-// Schema initialization on startup
+// Schema initialization with user tables
 db.serialize(() => {
-  // Create tables if not exist
+  db.run('PRAGMA foreign_keys = ON');
+  // Create users, sessions, projects, tracks, cue_points tables
 });
 ```
 
@@ -156,16 +180,18 @@ db.serialize(() => {
 ## Deployment Considerations
 
 ### Local Deployment
-- **Single Machine**: Designed for local use only
+- **Single Machine**: Designed for local use with multi-user support
 - **No External Dependencies**: Self-contained with embedded database
 - **Port Configuration**: Configurable port for multiple instances
 - **Data Persistence**: Local file system and SQLite database
+- **User Management**: Complete authentication system included
 
-### Potential Scaling Limitations
-- **Single User**: No authentication or multi-user support
-- **Local Storage**: Files stored on local file system only
-- **Database**: SQLite suitable for moderate data volumes
-- **Concurrent Access**: Not designed for multiple simultaneous users
+### Scaling Characteristics
+- **Multi-User Support**: Full authentication and authorization system
+- **Local Storage**: Files stored on local file system with access control
+- **Database**: SQLite suitable for moderate multi-user data volumes
+- **Concurrent Access**: Designed for multiple simultaneous users with session management
+- **Session Management**: Token-based authentication with expiration
 
 ## Security Considerations
 
@@ -174,15 +200,21 @@ db.serialize(() => {
 - **SQL Injection Prevention**: Parameterized queries throughout
 - **Path Traversal Prevention**: UUID-based file naming
 - **Input Sanitization**: Required field validation
+- **Authentication Validation**: Session token verification
+- **Password Security**: bcrypt hashing with salt rounds
 
 ### File System Security
 - **Restricted File Types**: Only MP3 files accepted
 - **Isolated Storage**: Project-specific directories
 - **UUID Naming**: Prevents predictable file paths
 - **Cleanup on Delete**: Orphaned files removed
+- **Access Control**: File serving based on ownership and publication status
 
 ### Network Security
 - **Local Binding**: Server binds to localhost by default
-- **No Authentication**: Designed for single-user local use
+- **Authentication Required**: Session-based authentication for protected routes
+- **Authorization**: Middleware-based ownership verification
+- **Session Security**: Token-based sessions with expiration
+- **Password Security**: bcrypt hashing prevents rainbow table attacks
 - **CORS**: Not configured (local application)
-- **HTTPS**: Not required for local deployment
+- **HTTPS**: Not required for local deployment but recommended for production
