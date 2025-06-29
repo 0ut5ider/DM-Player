@@ -24,7 +24,7 @@
 
 ### Core Functionality ✅
 - **Project Management**: Complete CRUD operations for user-owned projects
-  - Create new projects with unique names
+  - Create new projects with unique names (Fixed authentication system usage)
   - List user's own projects and public projects
   - Update project names and publication status
   - Delete projects with cascade cleanup of tracks and cue points

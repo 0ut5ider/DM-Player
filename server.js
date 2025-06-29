@@ -429,7 +429,6 @@ app.get('/api/my/projects', authenticateUser, (req, res) => {
 // Create new project
 app.post('/api/my/projects', authenticateUser, (req, res) => {
   const { name } = req.body;
-  const userId = req.session.userId;
 
   if (!name) {
     return res.status(400).json({ error: 'Project name is required' });
@@ -438,7 +437,6 @@ app.post('/api/my/projects', authenticateUser, (req, res) => {
   const now = new Date().toISOString();
   const newProject = {
     id: uuidv4(),
-    userId,
     name,
     user_id: req.user.id,
     status: 'draft',

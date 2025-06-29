@@ -2,6 +2,34 @@
 
 ## Current Work Focus
 
+### Project Creation Error Fix Complete ✅
+**Status**: Completed (29/06/2025, 7:44 PM)  
+**Task**: Fix "Cannot read properties of undefined (reading 'userId')" error when creating new projects
+
+Successfully identified and fixed the root cause of project creation failing with a TypeError when users attempted to create new projects.
+
+**Problem**: 
+- When users tried to create a new project, the server would crash with error: "TypeError: Cannot read properties of undefined (reading 'userId')"
+- The error occurred on line 432 of server.js in the project creation endpoint
+- This prevented users from creating any new projects, breaking core functionality
+
+**Root Cause**: 
+- The code was trying to access `req.session.userId` but this application uses token-based authentication, not session-based authentication
+- `req.session` was undefined because the app doesn't use Express sessions
+- The authentication system populates `req.user` (not `req.session`) through the `authenticateUser` middleware
+
+**Solution**: Fixed authentication system usage and cleaned up code:
+- **Authentication Fix**: Removed the problematic line `const userId = req.session.userId;` 
+- **Code Cleanup**: Eliminated duplicate variable assignments in the project creation function
+- **Proper Usage**: Function now correctly uses `req.user.id` which is populated by the authentication middleware
+- **Consistency**: Aligned with the existing token-based authentication pattern used throughout the application
+
+**Technical Implementation**:
+- Removed `const userId = req.session.userId;` from the `POST /api/my/projects` endpoint
+- Removed duplicate `userId` variable since `req.user.id` was already being used correctly
+- Simplified the `newProject` object creation to use only the correct authentication values
+- Verified the fix works with the existing Bearer token authentication system
+
 ### Login/Register Button Functionality Fix Complete ✅
 **Status**: Completed (29/06/2025, 7:35 PM)  
 **Task**: Fix login and register buttons not being functional after logout
@@ -161,6 +189,13 @@ Successfully implemented comprehensive URL routing system with proper page ident
 The memory bank has been thoroughly reviewed and confirmed to accurately reflect the current state of DM-Player. All documentation is up-to-date and comprehensive, covering the full multi-user system with authentication, project sharing, and advanced audio features.
 
 ## Recent Changes
+
+### Project Creation Error Fix (Current Session)
+- **Identified**: TypeError when creating new projects due to incorrect authentication system usage
+- **Fixed**: Removed problematic `req.session.userId` reference and used correct `req.user.id` from token authentication
+- **Cleaned**: Eliminated duplicate variable assignments in project creation function
+- **Restored**: Project creation functionality now works correctly with Bearer token authentication
+- **Verified**: New projects can be created successfully without server errors
 
 ### Login/Register Button Functionality Fix (Current Session)
 - **Identified**: JavaScript errors from undefined `isOwner` variable references preventing event listeners from attaching
