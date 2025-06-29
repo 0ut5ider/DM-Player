@@ -1,74 +1,70 @@
-# DM Player - Product Context
+# Product Context
 
-## Why This Project Exists
+## Why DM-Player Exists
 
-DM Player solves the problem of creating dynamic, non-linear music experiences. Traditional music players follow predictable patterns - tracks play in sequence or shuffle randomly. DM Player introduces **cue-point-based dynamic switching**, allowing creators to design musical experiences where tracks can seamlessly transition at specific time points, creating unique listening experiences every time.
+### The Problem
+Dungeon Masters and content creators face significant challenges when managing audio during live sessions:
 
-## Problems It Solves
+1. **Manual Track Management**: Constantly switching between tracks manually disrupts flow and immersion
+2. **Timing Precision**: Need for precise audio cues that align with specific moments in content
+3. **Randomization Needs**: Desire for unpredictable audio variety while maintaining control over when changes occur
+4. **Session Flow**: Audio management shouldn't interrupt the primary activity (storytelling, content creation)
+5. **Project Organization**: Different sessions/campaigns need separate audio collections and cue configurations
 
-### For Music Creators/DJs
-- **Creative Control**: Set precise moments where track transitions should occur
-- **Dynamic Performances**: Create performances that are different each time they're played
-- **Easy Experimentation**: Quickly test different track combinations and transition points
-- **Project Organization**: Keep related tracks and cue points organized in projects
-
-### For Listeners
-- **Unique Experiences**: Every playback session is different due to random track selection at cue points
-- **Discovery**: Browse and play projects created by other users in the public gallery
-- **Seamless Playback**: Transitions happen automatically without interrupting the listening experience
-
-### Technical Problems
-- **File Management**: Organized storage of MP3 files in project-specific directories
-- **Precise Timing**: Accurate cue point detection and seamless track switching
-- **Multi-User Support**: Secure user authentication and project ownership
-- **Data Persistence**: Reliable storage of projects, tracks, and cue points
+### The Solution
+DM-Player provides automated, cue-based audio management that allows creators to:
+- Pre-configure audio switching points before sessions
+- Focus on content delivery while audio manages itself
+- Maintain variety through randomization within controlled parameters
+- Organize audio assets by project/campaign/session
 
 ## How It Should Work
 
-### User Journey - Creator
-1. **Account Creation**: Register with artist name, email, and optional description
-2. **Project Creation**: Create a new project with a descriptive name
-3. **Track Upload**: Upload multiple MP3 files to the project
-4. **Cue Point Setup**: Add time-based cue points where track switches should occur
-5. **Testing**: Use the player controls to test the dynamic switching behavior
-6. **Sharing**: Project automatically appears in the public gallery for others to discover
+### User Experience Flow
+1. **Project Setup**: User creates a new project for their session/campaign
+2. **Content Preparation**: Upload relevant MP3 tracks for the project
+3. **Cue Configuration**: Set specific time points where track switching should occur
+4. **Live Session**: Start playback and let the system handle automatic switching
+5. **Manual Override**: Retain control with standard playback controls when needed
 
-### User Journey - Listener
-1. **Gallery Browsing**: View all projects in the public gallery with creator information
-2. **Instant Playback**: Click play on any project to start listening immediately
-3. **Seamless Experience**: Enjoy dynamic track switching without manual intervention
-4. **Discovery**: Explore different creators and their musical projects
+### Core Interactions
+- **Intuitive Project Management**: Simple creation, selection, and organization of projects
+- **Drag-and-Drop Upload**: Easy MP3 file addition to projects
+- **Visual Cue Timeline**: Clear representation of when switches will occur
+- **Responsive Controls**: Immediate feedback for all user actions
+- **Seamless Playback**: Smooth transitions that don't disrupt the experience
 
-### Core Playback Behavior
-- **Initial Play**: Randomly selects a track from the project to start playback
-- **Cue Point Detection**: Monitors playback time and detects when cue points are reached
-- **Dynamic Switching**: At each cue point, randomly selects a different track and continues from the same time position
-- **Continuous Experience**: Maintains the illusion that all tracks are playing simultaneously, with only one audible at a time
+### Key Behaviors
+- **Automatic Switching**: When playback reaches a cue point, randomly select and switch to a different track
+- **Continuous Playback**: No gaps or interruptions during track transitions
+- **Visual Feedback**: Clear indication of current track, progress, and upcoming cue points
+- **Persistent State**: Projects and configurations survive application restarts
 
 ## User Experience Goals
 
-### Simplicity
-- Clean, intuitive interface that doesn't overwhelm users
-- Minimal clicks required to create projects and add content
-- Clear visual feedback for all actions
+### Primary Objectives
+1. **Minimal Cognitive Load**: Users shouldn't need to think about audio management during sessions
+2. **Reliable Automation**: Cue points must trigger consistently and precisely
+3. **Quick Setup**: Project configuration should be fast and straightforward
+4. **Flexible Control**: Balance automation with manual override capabilities
+5. **Clear Feedback**: Users always know what's playing and what's coming next
 
-### Reliability
-- Consistent playback behavior across different browsers
-- Robust error handling for file uploads and network issues
-- Automatic session management for authenticated users
+### Success Metrics
+- Users can set up a complete project in under 5 minutes
+- Cue point accuracy within 100ms of specified time
+- Zero audio dropouts during track transitions
+- Intuitive interface requiring no documentation for basic use
+- Stable performance during extended sessions (2+ hours)
 
-### Discoverability
-- Public gallery makes all projects easily accessible
-- Clear project information including creator and dates
-- Visual cue point timeline for understanding project structure
+### User Scenarios
+1. **D&D Session**: DM sets ambient music with combat cues for automatic battle music switching
+2. **Podcast Recording**: Creator uses timed cues for segment transitions and background changes
+3. **Live Streaming**: Streamer pre-configures music changes aligned with planned content segments
+4. **Presentation**: Speaker uses audio cues to enhance storytelling with automatic mood changes
 
-### Performance
-- Fast loading of projects and tracks
-- Smooth audio transitions without gaps or glitches
-- Responsive UI that works well on different screen sizes
-
-## Success Metrics
-- Users can successfully create and play projects with dynamic switching
-- Gallery provides engaging discovery experience for listeners
-- Audio transitions are seamless and maintain musical flow
-- Interface is intuitive enough to use without documentation
+## Design Principles
+- **Simplicity First**: Every feature should have clear, immediate value
+- **Reliability Over Features**: Core functionality must be rock-solid before adding complexity
+- **Visual Clarity**: Interface should communicate state and actions clearly
+- **Responsive Feedback**: All user actions should have immediate, obvious results
+- **Graceful Degradation**: System should handle edge cases without breaking the experience

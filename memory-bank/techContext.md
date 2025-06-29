@@ -1,180 +1,220 @@
-# DM Player - Technical Context
+# Technical Context
 
 ## Technology Stack
 
-### Frontend Technologies
-- **HTML5**: Semantic markup with modern web standards
-- **CSS3**: Flexbox/Grid layouts, responsive design, custom properties
-- **Vanilla JavaScript**: ES6+ features, no external frameworks
-- **Font Awesome**: Icon library for UI elements
-- **HTML5 Audio API**: Core audio playback functionality
-
 ### Backend Technologies
-- **Node.js**: JavaScript runtime environment
-- **Express.js**: Web application framework
-- **SQLite3**: Embedded database with node-sqlite3 driver
-- **Multer**: Middleware for handling multipart/form-data (file uploads)
-- **bcryptjs**: Password hashing library
-- **express-session**: Session middleware for authentication
-- **connect-sqlite3**: SQLite session store for express-session
-- **music-metadata**: Library for extracting MP3 metadata
-- **uuid**: UUID generation for unique identifiers
+- **Node.js**: Runtime environment for server-side JavaScript
+- **Express.js v5.1.0**: Web framework for RESTful API
+- **SQLite3 v5.1.7**: Embedded database for data persistence
+- **bcrypt**: Password hashing library for secure authentication
+- **Multer v1.4.5-lts.2**: Middleware for handling multipart/form-data (file uploads)
+- **music-metadata v11.2.1**: Library for extracting audio file metadata
+- **UUID v11.1.0**: Library for generating unique identifiers
 
-### Development Tools
-- **npm**: Package management
-- **Git**: Version control
-- **VSCode**: Development environment
+### Frontend Technologies
+- **Vanilla HTML5**: Semantic markup structure
+- **CSS3**: Styling with modern features (flexbox, grid)
+- **Vanilla JavaScript (ES6+)**: Client-side logic without frameworks
+- **Font Awesome 6.0.0**: Icon library for UI elements
+- **HTML5 Audio API**: Native audio playback capabilities
 
-## Dependencies
+### Development Environment
+- **Package Manager**: npm (Node Package Manager)
+- **Version Control**: Git (GitHub repository)
+- **Server Port**: 3001 (configurable via PORT environment variable)
+- **File System**: Local storage for MP3 files and SQLite database
 
-### Production Dependencies (package.json)
+## Dependencies Analysis
+
+### Production Dependencies
 ```json
 {
-  "express": "^5.1.0",
-  "multer": "^1.4.5-lts.2",
-  "music-metadata": "^11.2.1",
-  "sqlite3": "^5.1.7",
-  "uuid": "^11.1.0",
-  "bcryptjs": "^2.4.3",
-  "express-session": "^1.17.3",
-  "connect-sqlite3": "^0.9.13"
+  "bcrypt": "^5.1.1",           // Password hashing for authentication
+  "express": "^5.1.0",          // Web server framework
+  "multer": "^1.4.5-lts.2",     // File upload handling
+  "music-metadata": "^11.2.1",  // Audio metadata extraction
+  "sqlite3": "^5.1.7",          // Database engine
+  "uuid": "^11.1.0"             // Unique ID generation
 }
 ```
 
-### Key Library Usage Patterns
-
-#### Express.js Configuration
-- **Static File Serving**: `app.use(express.static('public'))`
-- **JSON Parsing**: `app.use(express.json())`
-- **Session Management**: SQLite-backed sessions with secure cookies
-- **Middleware Chain**: Authentication → Authorization → Route Handler
-
-#### SQLite3 Integration
-- **Connection Management**: Single database connection in `database.js`
-- **Schema Initialization**: Tables created on startup if not exists
-- **Query Patterns**: Parameterized queries for security
-- **Transaction Handling**: Implicit transactions for single operations
-
-#### File Upload (Multer)
-- **Storage Configuration**: Custom destination and filename functions
-- **File Filtering**: MIME type validation for MP3 files only
-- **Error Handling**: Graceful handling of upload failures
-- **Path Management**: UUID-based filenames in project directories
+### Key Dependency Purposes
+- **bcrypt**: Secure password hashing and verification for user authentication
+- **Express**: Handles HTTP routing, middleware, static file serving
+- **Multer**: Processes MP3 file uploads with validation and storage
+- **music-metadata**: Extracts duration and other metadata from audio files
+- **SQLite3**: Provides embedded database without external server requirements
+- **UUID**: Generates unique identifiers for users, projects, tracks, and cue points
 
 ## Development Setup
 
-### Environment Configuration
-- **Port**: Default 3001, configurable via `process.env.PORT`
-- **Host Binding**: `0.0.0.0` for LAN accessibility
-- **Session Secret**: Configurable via `process.env.SESSION_SECRET`
-- **Database Path**: `dm_player.sqlite` in project root
+### Prerequisites
+- Node.js (version compatible with dependencies)
+- npm (comes with Node.js)
+- Modern web browser with HTML5 audio support
 
-### File Structure
-```
-/home/outsider/Coding Projects/DM-Player/
-├── public/                 # Frontend assets
-│   ├── index.html         # Main HTML file
-│   ├── app.js            # Frontend JavaScript
-│   └── style.css         # Styling
-├── projects/             # User data storage
-│   ├── [project-id]/     # Project directories
-│   │   └── audio/        # MP3 files
-│   └── dm_player.sqlite  # Database file
-├── memory-bank/          # Documentation
-├── server.js            # Main server file
-├── database.js          # Database configuration
-└── package.json         # Dependencies
+### Installation Process
+```bash
+git clone https://github.com/0ut5ider/DM-Player.git
+cd DM-Player
+npm install
+npm start
 ```
 
-### Build & Run Process
-1. **Install Dependencies**: `npm install`
-2. **Start Server**: `npm start` (runs `node server.js`)
-3. **Access Application**: `http://localhost:3001`
-4. **Database Initialization**: Automatic on first run
+### Project Structure
+```
+DM-Player/
+├── package.json              # Project configuration and dependencies
+├── package-lock.json         # Locked dependency versions
+├── server.js                 # Main server application
+├── database.js               # Database connection and schema
+├── README.md                 # Project documentation
+├── changelog.md              # Version history
+├── plan.md                   # Development planning
+├── .gitignore               # Git ignore rules
+├── public/                   # Frontend assets
+│   ├── index.html           # Main HTML structure
+│   ├── style.css            # Application styling
+│   └── app.js               # Client-side JavaScript
+└── projects/                # Runtime data storage
+    └── {projectId}/         # Project-specific directories
+        └── audio/           # MP3 file storage
+```
 
 ## Technical Constraints
 
 ### Browser Compatibility
-- **Modern Browsers**: Chrome, Firefox, Safari, Edge (recent versions)
-- **HTML5 Audio**: Required for core functionality
-- **ES6+ JavaScript**: Arrow functions, async/await, destructuring
-- **CSS Grid/Flexbox**: For responsive layouts
+- **HTML5 Audio Support**: Required for playback functionality
+- **ES6+ JavaScript**: Modern browser features used throughout
+- **Fetch API**: Used for HTTP requests to backend
+- **File API**: Required for file upload functionality
+- **Local Storage**: Used for session token persistence
+
+### System Requirements
+- **File System Access**: Local storage for MP3 files and database
+- **Network Access**: HTTP server on localhost
+- **Audio Codecs**: MP3 playback support in browser
+- **Memory**: Sufficient RAM for audio buffering and metadata processing
+- **Session Storage**: Browser local storage for authentication tokens
 
 ### Performance Considerations
-- **File Size Limits**: Multer configuration can be adjusted for max file size
-- **Concurrent Users**: SQLite suitable for moderate concurrent access
-- **Memory Usage**: Audio files streamed, not loaded into memory
-- **Database Queries**: Optimized with proper indexing on foreign keys
+- **File Size Limits**: Multer configuration may limit upload sizes
+- **Concurrent Users**: Multi-user application with session management
+- **Database Size**: SQLite suitable for moderate multi-user data volumes
+- **Audio Streaming**: Browser handles audio buffering and streaming
+- **Session Management**: 7-day session expiration with automatic cleanup
 
-### Security Constraints
-- **Session Storage**: SQLite-based, suitable for single-server deployment
-- **File Access**: Controlled through API endpoints, no direct file serving
-- **Input Validation**: Server-side validation for all user inputs
-- **Authentication**: Session-based, not suitable for distributed systems
+## Configuration Patterns
 
-## API Design
+### Environment Variables
+- **PORT**: Server port (default: 3001)
+- **NODE_ENV**: Environment mode (development/production)
 
-### Authentication Endpoints
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/status` - Check authentication status
+### Authentication Configuration
+```javascript
+// Password hashing
+const saltRounds = 10;
+const passwordHash = await bcrypt.hash(password, saltRounds);
 
-### Project Management
-- `GET /api/projects` - List user's projects (authenticated)
-- `POST /api/projects` - Create new project (authenticated)
-- `GET /api/projects/:id` - Get project details (owner only)
-- `PUT /api/projects/:id` - Update project (owner only)
-- `DELETE /api/projects/:id` - Delete project (owner only)
+// Session management
+const sessionId = uuidv4();
+const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-### Track Management
-- `POST /api/projects/:id/tracks` - Upload tracks (owner only)
-- `DELETE /api/projects/:id/tracks/:trackId` - Delete track (owner only)
+// Authentication middleware
+const authenticateUser = (req, res, next) => {
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+  // Validate session against database
+};
+```
 
-### Cue Point Management
-- `GET /api/projects/:id/cues` - List cue points (public)
-- `POST /api/projects/:id/cues` - Create cue point (owner only)
-- `PUT /api/projects/:id/cues/:cueId` - Update cue point (owner only)
-- `DELETE /api/projects/:id/cues/:cueId` - Delete cue point (owner only)
+### File Upload Configuration
+```javascript
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: './projects/{projectId}/audio/',
+  filename: '{uuid}.mp3'
+});
 
-### Gallery & File Serving
-- `GET /api/gallery/projects` - Public gallery (all projects with tracks/cues)
-- `GET /projects/:id/audio/:trackId` - Serve audio files (public)
+// File filtering with security
+fileFilter: (req, file, cb) => {
+  if (file.mimetype !== 'audio/mpeg') {
+    return cb(new Error('Only MP3 files allowed'), false);
+  }
+  cb(null, true);
+}
+```
 
-## Tool Usage Patterns
+### Database Configuration
+```javascript
+// SQLite connection with multi-user schema
+const dbPath = path.resolve(__dirname, 'dm_player.sqlite');
+const db = new sqlite3.Database(dbPath);
 
-### UUID Generation
-- **Projects**: Unique project identifiers
-- **Tracks**: Unique track identifiers (also used as filenames)
-- **Users**: Unique user identifiers
-- **Cue Points**: Unique cue point identifiers
+// Schema initialization with user tables
+db.serialize(() => {
+  db.run('PRAGMA foreign_keys = ON');
+  // Create users, sessions, projects, tracks, cue_points tables
+});
+```
 
-### Music Metadata Extraction
-- **Duration Calculation**: Extracted during upload for UI display
-- **File Validation**: Ensures uploaded files are valid MP3s
-- **Error Handling**: Graceful fallback if metadata extraction fails
+## Development Workflow
 
-### Session Management
-- **Cookie Configuration**: HTTP-only, secure in production
-- **Session Store**: SQLite table for persistence
-- **Cleanup**: Automatic session expiration (24 hours)
+### Server Development
+1. **Express Routes**: RESTful API endpoints in server.js
+2. **Database Operations**: SQL queries with parameterized statements
+3. **File Handling**: Multer middleware for uploads, fs for file operations
+4. **Error Handling**: Consistent error responses and logging
 
-### Error Handling Patterns
-- **API Errors**: Consistent JSON error responses with status codes
-- **File Errors**: Graceful handling of upload/deletion failures
-- **Database Errors**: Transaction rollback and error logging
-- **Frontend Errors**: User-friendly error messages via alerts
+### Frontend Development
+1. **DOM Manipulation**: Vanilla JavaScript for UI updates
+2. **Event Handling**: User interaction and audio event listeners
+3. **API Communication**: Fetch requests to backend endpoints
+4. **State Management**: JavaScript variables for application state
+
+### Testing Approach
+- **Manual Testing**: Browser-based testing of functionality
+- **API Testing**: Direct endpoint testing during development
+- **File Upload Testing**: Various MP3 files and edge cases
+- **Audio Playback Testing**: Cross-browser compatibility verification
 
 ## Deployment Considerations
 
-### Local Development
-- **Database**: SQLite file created automatically
-- **File Storage**: Local filesystem in `projects/` directory
-- **Session Storage**: SQLite table in same database
-- **Port Configuration**: Default 3001, LAN accessible
+### Local Deployment
+- **Single Machine**: Designed for local use with multi-user support
+- **No External Dependencies**: Self-contained with embedded database
+- **Port Configuration**: Configurable port for multiple instances
+- **Data Persistence**: Local file system and SQLite database
+- **User Management**: Complete authentication system included
 
-### Production Readiness
-- **Environment Variables**: Session secrets, port configuration
-- **HTTPS**: Required for secure session cookies
-- **File Permissions**: Proper permissions for upload directories
-- **Database Backup**: Regular SQLite database backups recommended
+### Scaling Characteristics
+- **Multi-User Support**: Full authentication and authorization system
+- **Local Storage**: Files stored on local file system with access control
+- **Database**: SQLite suitable for moderate multi-user data volumes
+- **Concurrent Access**: Designed for multiple simultaneous users with session management
+- **Session Management**: Token-based authentication with expiration
+
+## Security Considerations
+
+### Input Validation
+- **File Type Validation**: MIME type and extension checking
+- **SQL Injection Prevention**: Parameterized queries throughout
+- **Path Traversal Prevention**: UUID-based file naming
+- **Input Sanitization**: Required field validation
+- **Authentication Validation**: Session token verification
+- **Password Security**: bcrypt hashing with salt rounds
+
+### File System Security
+- **Restricted File Types**: Only MP3 files accepted
+- **Isolated Storage**: Project-specific directories
+- **UUID Naming**: Prevents predictable file paths
+- **Cleanup on Delete**: Orphaned files removed
+- **Access Control**: File serving based on ownership and publication status
+
+### Network Security
+- **Local Binding**: Server binds to localhost by default
+- **Authentication Required**: Session-based authentication for protected routes
+- **Authorization**: Middleware-based ownership verification
+- **Session Security**: Token-based sessions with expiration
+- **Password Security**: bcrypt hashing prevents rainbow table attacks
+- **CORS**: Not configured (local application)
+- **HTTPS**: Not required for local deployment but recommended for production

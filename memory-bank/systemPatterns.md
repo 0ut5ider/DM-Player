@@ -1,150 +1,241 @@
-# DM Player - System Patterns & Architecture
+# System Patterns
 
-## System Architecture
+## Architecture Overview
 
-### High-Level Architecture
+### Multi-User Three-Tier Architecture
 ```
-Frontend (Browser)
-├── HTML5 Audio API
-├── Vanilla JavaScript
-├── CSS3 Styling
-└── Responsive Design
-
-Backend (Node.js/Express)
-├── Authentication Middleware
-├── File Upload (Multer)
-├── Session Management
-└── API Routes
-
-Data Layer
-├── SQLite Database
-│   ├── users table
-│   ├── projects table
-│   ├── tracks table
-│   └── cue_points table
-└── File System
-    └── projects/[project_id]/audio/[track_id].mp3
+Frontend (Browser) ←→ Authentication Layer ←→ Backend (Express/Node.js) ←→ Database (SQLite)
+                                                        ↓
+                                                File System (MP3 Storage)
 ```
 
-### Database Schema Design
+### Core Components
+1. **Express Server** (`server.js`): RESTful API with authentication and authorization
+2. **SQLite Database** (`database.js`): Multi-user persistent storage with user management
+3. **Frontend SPA** (`public/`): Multi-view single-page application with authentication
+4. **Authentication System**: Session-based auth with bcrypt password hashing
+5. **File Storage**: Organized project directories with access control
 
-#### Core Tables
-- **users**: User authentication and profile data
-  - `id` (TEXT, PRIMARY KEY) - UUID
-  - `artistName`, `email`, `passwordHash`, `description`
-  - `createdAt`, `updatedAt` timestamps
+## Database Design
 
-- **projects**: Project metadata with ownership
-  - `id` (TEXT, PRIMARY KEY) - UUID
-  - `userId` (FOREIGN KEY) - Links to users table
-  - `name`, `createdAt`, `updatedAt`
-  - ON DELETE CASCADE for user deletion
+### Multi-User Schema Structure
+```sql
+users (id, username, email, password_hash, created_at)
+    ↓ (1:many)
+sessions (id, user_id, expires_at)
 
-- **tracks**: Audio file metadata
-  - `id` (TEXT, PRIMARY KEY) - UUID
-  - `projectId` (FOREIGN KEY) - Links to projects table
-  - `originalName`, `path`, `duration`
-  - ON DELETE CASCADE for project deletion
-
-- **cue_points**: Time-based switching points
-  - `id` (TEXT, PRIMARY KEY) - UUID
-  - `projectId` (FOREIGN KEY) - Links to projects table
-  - `time` (REAL) - Time in seconds
-  - ON DELETE CASCADE for project deletion
-
-### Key Design Patterns
-
-#### Authentication & Authorization
-- **Session-based Authentication**: Uses express-session with SQLite store
-- **Middleware Pattern**: `isAuthenticated` and `isProjectOwner` middleware
-- **Role-based Access**: Project owners can edit, everyone can view gallery
-
-#### File Management Pattern
-- **UUID-based Naming**: Prevents filename conflicts and provides security
-- **Hierarchical Storage**: `projects/[project_id]/audio/[track_id].mp3`
-- **Metadata Extraction**: Uses music-metadata library for MP3 duration
-
-#### API Design Pattern
-- **RESTful Routes**: Standard CRUD operations for all resources
-- **Nested Resources**: `/api/projects/:projectId/tracks` structure
-- **Error Handling**: Consistent error responses with status codes
-- **Data Validation**: Input validation at API layer
-
-#### Frontend State Management
-- **Global State Variables**: `currentUser`, `currentProject`, `currentView`
-- **View Management**: Single-page application with view switching
-- **Event-driven Updates**: DOM updates triggered by API responses
-
-## Critical Implementation Paths
-
-### Audio Playback Engine
-```javascript
-// Core playback flow
-playAudio() → selectRandomTrack() → updateUpcomingCuePoints() → 
-checkCuePoints() → switchToRandomTrack() → playAudio()
+users (id, username, email, password_hash, created_at)
+    ↓ (1:many)
+projects (id, name, user_id, status, created_at, published_at)
+    ↓ (1:many)
+tracks (id, project_id, original_name, path, duration)
+    ↓ (1:many) 
+cue_points (id, project_id, time)
 ```
 
-**Key Components:**
-- **Track Selection**: Random selection excluding current track
-- **Cue Point Detection**: Time-based monitoring with `timeupdate` event
-- **Seamless Switching**: Preserves playback position across track changes
-- **State Management**: Prevents multiple simultaneous switches
+### Key Patterns
+- **UUID Primary Keys**: All entities use UUID v4 for unique identification
+- **User Ownership**: All projects belong to specific users
+- **Session Management**: Token-based authentication with expiration
+- **Publication Status**: Projects can be draft (private) or published (public)
+- **Foreign Key Constraints**: CASCADE DELETE ensures data integrity
+- **Timestamp Tracking**: ISO string format for creation and publication dates
+- **Path Storage**: Relative paths within project directories
+- **Access Control**: File serving respects ownership and publication status
 
-### Dynamic Cue Point System
-- **Timeline Visualization**: Visual representation of cue points on progress bar
-- **Drag-and-Drop Editing**: Real-time cue point adjustment (owner only)
-- **Color Coding**: Unique colors for each cue point for visual distinction
-- **Sorted Processing**: Cue points processed in chronological order
+## API Design Patterns
 
-### Multi-View Navigation
-- **Hash-based Routing**: URL fragments for view state management
-- **Context-aware UI**: Different controls based on user authentication
-- **Global Player**: Persistent player controls across views
-- **Back Navigation**: Intelligent back button behavior
-
-### File Upload Pipeline
+### RESTful Endpoints with Authentication
 ```
-File Selection → Multer Processing → Metadata Extraction → 
-Database Storage → File System Storage → UI Update
+# Authentication Routes
+POST   /api/auth/register         # User registration
+POST   /api/auth/login           # User login
+POST   /api/auth/logout          # User logout
+GET    /api/auth/me              # Get current user
+
+# User Project Management (Authenticated)
+GET    /api/my/projects          # List user's own projects
+POST   /api/my/projects          # Create new project
+GET    /api/my/projects/:id      # Get user's project details
+PUT    /api/my/projects/:id      # Update project name/status
+DELETE /api/my/projects/:id      # Delete user's project
+
+POST   /api/my/projects/:id/tracks        # Upload tracks (multipart)
+DELETE /api/my/projects/:id/tracks/:trackId  # Delete track
+
+GET    /api/my/projects/:id/cues          # List cue points
+POST   /api/my/projects/:id/cues          # Create cue point
+PUT    /api/my/projects/:id/cues/:cueId   # Update cue point
+DELETE /api/my/projects/:id/cues/:cueId   # Delete cue point
+
+# Public Library (No Authentication)
+GET    /api/public/projects       # List published projects by user
+GET    /api/public/users          # List users with published projects
+GET    /api/public/users/:username/projects  # Get user's published projects
+GET    /api/public/projects/:id   # Get published project details
+GET    /api/public/projects/:id/cues  # Get published project cue points
+
+# File Serving (Access Controlled)
+GET    /projects/:id/audio/:trackId  # Serve audio files with access control
 ```
 
-## Component Relationships
+### Response Patterns
+- **Consistent Error Format**: `{ error: "message", details: "specifics" }`
+- **Authentication Errors**: 401 for missing/invalid tokens, 403 for access denied
+- **Resource Return**: Operations return the affected resource
+- **Status Codes**: Proper HTTP status codes for all scenarios
+- **Sorted Results**: Cue points always returned sorted by time
+- **User Context**: Responses include user information where relevant
 
-### Frontend Components
-- **View Manager**: Controls visibility of login, gallery, projects, detail views
-- **Auth Manager**: Handles login state and navigation updates
-- **Player Controller**: Manages audio playback and cue point logic
-- **Project Manager**: Handles CRUD operations for projects and tracks
-- **Modal System**: Reusable modal components for forms
+## File System Organization
 
-### Backend Middleware Stack
-- **Session Middleware**: Persistent user sessions with SQLite storage
-- **Authentication Middleware**: Route protection and user verification
-- **File Upload Middleware**: Multer configuration for MP3 processing
-- **Static File Serving**: Express static middleware for frontend assets
+### Directory Structure
+```
+projects/
+├── {projectId}/
+│   └── audio/
+│       ├── {trackId}.mp3
+│       ├── {trackId}.mp3
+│       └── ...
+├── {projectId}/
+│   └── audio/
+│       └── ...
+```
 
-### Data Flow Patterns
-- **API-First Design**: All data operations go through REST API
-- **Optimistic Updates**: UI updates immediately, syncs with server
-- **Error Boundaries**: Graceful error handling with user feedback
-- **Session Persistence**: Automatic login state restoration
+### File Handling Patterns
+- **UUID Filenames**: Prevent conflicts and maintain uniqueness
+- **Atomic Operations**: File and database operations coordinated
+- **Cleanup on Delete**: Orphaned files removed when entities deleted
+- **Directory Creation**: Automatic creation of required directories
+
+## Frontend Architecture
+
+### Multi-View Single Page Application Pattern
+- **Authentication State**: User login status and session management
+- **View State Management**: JavaScript controls visibility of multiple main views
+- **Modal System**: Reusable modal components for user input
+- **Event-Driven Updates**: DOM updates triggered by user actions
+- **API Integration**: Fetch-based communication with authentication headers
+
+### Component Organization
+```
+index.html (structure)
+├── Public Browse View (no auth required)
+├── Login/Register Views
+├── User Dashboard View (authenticated)
+├── Project Detail View
+│   ├── Player Controls
+│   ├── Tracks Section
+│   └── Cue Points Section
+├── Mini Player (cross-project audio control)
+└── Modal System
+    ├── Create Project
+    ├── Edit Project
+    ├── Add Cue Point
+    ├── Edit Cue Point
+    └── Confirm Actions
+```
+
+### State Management Patterns
+- **Authentication State**: Current user, session token, login status
+- **Global State**: Current project, playback state, UI state, current view
+- **Project Context State**: Playing vs viewing project tracking
+  - `currentPlayingProjectId`: Which project's audio is currently playing
+  - `currentViewingProjectId`: Which project page is currently being viewed
+  - `playingProjectData`: Full data of the project currently playing audio
+- **Local Storage**: Session token persistence for authentication
+- **Real-time Updates**: Immediate UI updates after successful API calls
+- **Error Handling**: User-friendly error messages for all failure scenarios
+- **Navigation State**: Track current view and handle back button functionality
+- **Cross-Project Audio Management**: Smart handling of audio when navigating between projects
+
+## Audio Processing Patterns
+
+### Advanced Playback Management
+- **HTML5 Audio Element**: Single audio element for all playback
+- **Source Switching**: Dynamic src changes for track transitions with access control
+- **Event Listeners**: Progress tracking and cue point detection
+- **Metadata Extraction**: Server-side duration calculation using music-metadata
+- **Access Control**: Audio file serving respects project ownership and publication
+
+### Advanced Cue Point System
+- **Time-based Triggers**: Continuous monitoring of playback position
+- **Random Selection**: Algorithm excludes current track from random selection
+- **Seamless Transitions**: Immediate switching without playback interruption
+- **Visual Timeline**: Interactive timeline representation with drag-and-drop editing
+- **Color-coded Cues**: Visual distinction between different cue points
+- **Real-time Updates**: Timeline synchronization with audio progress
+- **Drag-and-Drop Editing**: Direct manipulation of cue point positions
+- **Cross-Project Timeline Isolation**: Defensive programming prevents visual pollution
+  - Comprehensive validation: `Array.isArray(cuePoints) && cuePoints.length > 0`
+  - Timeline container always cleared before rendering new cue points
+  - Proper null/undefined handling for projects without cue points
+  - Prevents cue points from previous projects persisting on new project timelines
 
 ## Security Patterns
 
 ### Authentication Security
-- **Password Hashing**: bcryptjs with salt for secure password storage
-- **Session Security**: HTTP-only cookies with secure flags in production
-- **Input Validation**: Server-side validation for all user inputs
-- **CSRF Protection**: Session-based protection against cross-site requests
+- **Password Hashing**: bcrypt with salt rounds for secure password storage
+- **Session Management**: UUID-based session tokens with expiration
+- **Token Validation**: Middleware validates session tokens on protected routes
+- **Session Cleanup**: Automatic cleanup of expired sessions
 
-### File Security
-- **UUID Filenames**: Prevents directory traversal and filename guessing
-- **MIME Type Validation**: Only MP3 files accepted for upload
-- **Path Sanitization**: Secure file path construction
-- **Access Control**: File serving through controlled API endpoints
+### Authorization Security
+- **Ownership Verification**: Middleware checks project ownership before operations
+- **Access Control**: File serving respects ownership and publication status
+- **Route Protection**: Authentication required for user-specific operations
+- **Public/Private Model**: Clear separation between public and private content
 
-### Data Security
+### File Upload Security
+- **MIME Type Validation**: Only audio/mpeg files accepted
+- **File Extension Checking**: .mp3 extension required
+- **Directory Traversal Prevention**: UUID-based paths prevent malicious access
+- **Size Limits**: Multer configuration prevents oversized uploads
+- **Access Control**: File serving validates ownership or publication status
+
+### API Security
+- **Input Validation**: Required field checking and type validation
 - **SQL Injection Prevention**: Parameterized queries throughout
-- **XSS Prevention**: HTML escaping for user-generated content
-- **Authorization Checks**: Ownership verification for all write operations
-- **Foreign Key Constraints**: Database-level referential integrity
+- **Path Sanitization**: Safe file path construction
+- **Error Information Limiting**: Generic error messages to prevent information leakage
+- **Authentication Headers**: Bearer token validation on protected endpoints
+- **User Context**: All operations performed in context of authenticated user
+
+## Error Handling Patterns
+
+### Authentication Error Handling
+- **Session Validation**: Graceful handling of expired or invalid sessions
+- **Login Failures**: Clear error messages for authentication failures
+- **Registration Conflicts**: Proper handling of duplicate usernames/emails
+- **Token Refresh**: Automatic session cleanup and clear error responses
+
+### Database Operations
+- **Transaction Safety**: Rollback capabilities for multi-step operations
+- **Constraint Validation**: Foreign key and unique constraint handling
+- **Connection Management**: Proper database connection lifecycle
+- **Graceful Degradation**: Fallback behaviors for database failures
+- **User Context**: All operations performed with proper user authorization
+
+### File Operations
+- **Existence Checking**: Verify files exist before operations
+- **Permission Handling**: Graceful handling of file system permissions
+- **Cleanup on Failure**: Remove partial uploads on error
+- **Atomic File Operations**: Prevent corrupted file states
+- **Access Control**: File operations respect ownership and publication status
+
+## Performance Patterns
+
+### Database Optimization
+- **Efficient Queries**: Minimal database round trips with user context
+- **Index Usage**: Primary keys and foreign keys properly indexed
+- **Batch Operations**: Multiple file uploads handled efficiently
+- **Connection Reuse**: Single database connection throughout application lifecycle
+- **Session Queries**: Efficient session validation with user data joins
+
+### File Serving with Access Control
+- **Conditional File Serving**: Access control checks before serving files
+- **Streaming Support**: Proper HTTP headers for audio streaming
+- **Caching Headers**: Browser caching for static assets with security considerations
+- **Efficient Path Resolution**: Minimal file system operations
+- **Ownership Validation**: Database queries to verify access rights before serving
+- **Public/Private Routing**: Different serving logic for public vs. private content

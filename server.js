@@ -1,12 +1,10 @@
 const express = require('express');
 const multer = require('multer');
-const fs = require('fs'); // Still needed for file system operations (audio files, project dirs)
+const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
-const db = require('./database'); // Import the database connection
-const bcrypt = require('bcryptjs');
-const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,58 +13,69 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json());
 app.use(express.static('public'));
 
-// Session middleware
-app.use(session({
-  store: new SQLiteStore({
-    db: 'dm_player.sqlite', // Use the same database file
-    dir: __dirname, // Location of the database file
-    table: 'sessions' // Name of the sessions table
-  }),
-  secret: process.env.SESSION_SECRET || 'your_very_secret_key_12345', // Replace with a strong secret, ideally from env
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production', // true in production for HTTPS
-    httpOnly: true, 
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+// Catch-all handler for client-side routing (must be after static middleware)
+app.use((req, res, next) => {
+  // Only handle GET requests for routes that don't start with /api/ or /projects/
+  if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/projects/')) {
+    // Check if it's a request for a static file (has file extension)
+    const hasExtension = path.extname(req.path) !== '';
+    if (!hasExtension) {
+      // This is likely a client-side route, serve index.html
+      return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
   }
-}));
+  next();
+});
 
-// Authentication Middleware
-const isAuthenticated = (req, res, next) => {
-  if (req.session.userId) {
-    next();
-  } else {
-    res.status(401).json({ error: 'Unauthorized: You must be logged in.' });
-  }
-};
+// Ensure projects directory exists
+if (!fs.existsSync('./projects')) {
+  fs.mkdirSync('./projects', { recursive: true });
+}
 
-const isProjectOwner = (req, res, next) => {
-  const { projectId } = req.params;
-  const userId = req.session.userId;
-
-  if (!userId) { // Should be caught by isAuthenticated first, but good for direct use
-    return res.status(401).json({ error: 'Unauthorized: You must be logged in.' });
+// Authentication middleware
+const authenticateUser = (req, res, next) => {
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!sessionId) {
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
-  db.get("SELECT userId FROM projects WHERE id = ?", [projectId], (err, project) => {
+  const sql = `
+    SELECT u.id, u.username, u.email 
+    FROM users u 
+    JOIN sessions s ON u.id = s.user_id 
+    WHERE s.id = ? AND s.expires_at > datetime('now')
+  `;
+  
+  db.get(sql, [sessionId], (err, user) => {
     if (err) {
-      return res.status(500).json({ error: 'Error checking project ownership', details: err.message });
+      return res.status(500).json({ error: 'Authentication error', details: err.message });
     }
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found.' });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
     }
-    if (project.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden: You are not the owner of this project.' });
-    }
+    
+    req.user = user;
     next();
   });
 };
 
-// Ensure projects directory exists (still needed for storing project-specific audio folders)
-if (!fs.existsSync('./projects')) {
-  fs.mkdirSync('./projects', { recursive: true });
-}
+// Project ownership middleware
+const checkProjectOwnership = (req, res, next) => {
+  const { projectId } = req.params;
+  const userId = req.user.id;
+  
+  const sql = 'SELECT id FROM projects WHERE id = ? AND user_id = ?';
+  db.get(sql, [projectId, userId], (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking project ownership', details: err.message });
+    }
+    if (!project) {
+      return res.status(403).json({ error: 'Project not found or access denied' });
+    }
+    next();
+  });
+};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -74,24 +83,22 @@ const storage = multer.diskStorage({
     const projectId = req.params.projectId; // projectId should be available from isProjectOwner
     const audioDir = path.join(__dirname, 'projects', projectId, 'audio');
     
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(audioDir)){
+    if (!fs.existsSync(audioDir)) {
       fs.mkdirSync(audioDir, { recursive: true });
     }
     
     cb(null, audioDir);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename using UUID
     const fileId = uuidv4();
-    cb(null, `${fileId}${path.extname(file.originalname)}`);
+    // Always save MP3 files with .mp3 extension for consistency
+    cb(null, `${fileId}.mp3`);
   }
 });
 
 const upload = multer({ 
   storage: storage,
   fileFilter: function (req, file, cb) {
-    // Accept only mp3 files
     if (file.mimetype !== 'audio/mpeg') {
       return cb(new Error('Only MP3 files are allowed!'), false);
     }
@@ -99,204 +106,328 @@ const upload = multer({
   }
 });
 
+// Authentication Routes
 
-// API Routes
-
-// --- Authentication Routes ---
-
-// Register a new user
+// Register new user
 app.post('/api/auth/register', async (req, res) => {
-  const { artistName, email, password, description } = req.body;
-
-  if (!artistName || !email || !password) {
-    return res.status(400).json({ error: 'Artist name, email, and password are required.' });
-  }
-
-  // Basic email validation
-  if (!/\S+@\S+\.\S+/.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format.' });
-  }
-
-  // Basic password length
-  if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  const { username, email, password } = req.body;
+  
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Username, email, and password are required' });
   }
 
   try {
-    const existingUser = await new Promise((resolve, reject) => {
-      db.get("SELECT email FROM users WHERE email = ?", [email], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
-
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email already in use.' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
-    const now = new Date().toISOString();
-
-    const insertSql = `INSERT INTO users (id, artistName, email, passwordHash, description, createdAt, updatedAt) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    await new Promise((resolve, reject) => {
-      db.run(insertSql, [userId, artistName, email, passwordHash, description || null, now, now], function(err) {
-        if (err) reject(err);
-        resolve(this);
+    const createdAt = new Date().toISOString();
+    
+    const sql = 'INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)';
+    db.run(sql, [userId, username, email, passwordHash, createdAt], function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: 'Username or email already exists' });
+        }
+        return res.status(500).json({ error: 'Failed to create user', details: err.message });
+      }
+      
+      res.status(201).json({ 
+        id: userId, 
+        username, 
+        email, 
+        created_at: createdAt 
       });
     });
-
-    // Automatically log in user after registration
-    req.session.userId = userId;
-    req.session.artistName = artistName; // Store for convenience
-
-    res.status(201).json({ 
-      message: 'User registered successfully.',
-      user: { id: userId, artistName, email } 
-    });
-
   } catch (err) {
-    console.error("Registration error:", err);
-    res.status(500).json({ error: 'Server error during registration.', details: err.message });
+    res.status(500).json({ error: 'Failed to hash password', details: err.message });
   }
 });
 
-// Login an existing user
+// Login user
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-
+  
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
+    return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  try {
-    const user = await new Promise((resolve, reject) => {
-      db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials.' }); // User not found
-    }
-
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials.' }); // Password incorrect
-    }
-
-    req.session.userId = user.id;
-    req.session.artistName = user.artistName;
-
-    res.json({ 
-      message: 'Login successful.',
-      user: { id: user.id, artistName: user.artistName, email: user.email }
-    });
-
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: 'Server error during login.', details: err.message });
-  }
-});
-
-// Logout a user
-app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(err => {
+  const sql = 'SELECT * FROM users WHERE email = ?';
+  db.get(sql, [email], async (err, user) => {
     if (err) {
-      return res.status(500).json({ error: 'Failed to logout.' });
+      return res.status(500).json({ error: 'Login error', details: err.message });
     }
-    res.clearCookie('connect.sid'); // Default cookie name for express-session
-    res.json({ message: 'Logout successful.' });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    try {
+      const passwordMatch = await bcrypt.compare(password, user.password_hash);
+      if (!passwordMatch) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      // Create session
+      const sessionId = uuidv4();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+      
+      const sessionSql = 'INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)';
+      db.run(sessionSql, [sessionId, user.id, expiresAt], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to create session', details: err.message });
+        }
+        
+        res.json({
+          sessionId,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email
+          }
+        });
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Password verification error', details: err.message });
+    }
   });
 });
 
-// Get authentication status
-app.get('/api/auth/status', (req, res) => {
-  if (req.session.userId) {
-    res.json({
-      loggedIn: true,
-      user: {
-        id: req.session.userId,
-        artistName: req.session.artistName,
-        // You might want to fetch email from DB if needed, or store it in session too
-      }
-    });
-  } else {
-    res.json({ loggedIn: false });
-  }
+// Logout user
+app.post('/api/auth/logout', authenticateUser, (req, res) => {
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+  
+  const sql = 'DELETE FROM sessions WHERE id = ?';
+  db.run(sql, [sessionId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Logout error', details: err.message });
+    }
+    res.json({ message: 'Logged out successfully' });
+  });
 });
 
-// --- End Authentication Routes ---
+// Get current user
+app.get('/api/auth/me', authenticateUser, (req, res) => {
+  res.json(req.user);
+});
 
+// User Profile Management Routes (Authenticated)
 
-// --- Gallery Route ---
-
-// Get all projects for the public gallery
-app.get('/api/gallery/projects', async (req, res) => {
-  try {
-    // Select project details and join with users table to get artistName
-    const projectsSql = `
-      SELECT p.id, p.name, p.createdAt, p.updatedAt, u.artistName as ownerArtistName, p.userId
-      FROM projects p
-      JOIN users u ON p.userId = u.id
-      ORDER BY p.updatedAt DESC
-    `;
-    const projects = await new Promise((resolve, reject) => {
-      db.all(projectsSql, [], (err, rows) => {
-        if (err) reject(err);
-        resolve(rows);
+// Get user's own profile
+app.get('/api/my/profile', authenticateUser, (req, res) => {
+  const profileSql = 'SELECT * FROM user_profiles WHERE user_id = ?';
+  const linksSql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+  
+  db.get(profileSql, [req.user.id], (err, profile) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve profile', details: err.message });
+    }
+    
+    db.all(linksSql, [req.user.id], (err, socialLinks) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
+      }
+      
+      res.json({
+        profile: profile || { user_id: req.user.id, artist_name: null, bio: null },
+        socialLinks: socialLinks || []
       });
     });
+  });
+});
 
-    // For each project, fetch its tracks
-    const projectsWithTracks = await Promise.all(projects.map(async (project) => {
-      const tracksSql = "SELECT id, originalName, path, duration FROM tracks WHERE projectId = ?";
-      const tracks = await new Promise((resolve, reject) => {
-        db.all(tracksSql, [project.id], (err, trackRows) => {
-          if (err) reject(err);
-          resolve(trackRows || []);
+// Update user's own profile
+app.put('/api/my/profile', authenticateUser, (req, res) => {
+  const { artist_name, bio } = req.body;
+  const userId = req.user.id;
+  const now = new Date().toISOString();
+  
+  // Check if profile exists
+  const checkSql = 'SELECT user_id FROM user_profiles WHERE user_id = ?';
+  db.get(checkSql, [userId], (err, existingProfile) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking profile', details: err.message });
+    }
+    
+    if (existingProfile) {
+      // Update existing profile
+      const updateSql = 'UPDATE user_profiles SET artist_name = ?, bio = ?, updated_at = ? WHERE user_id = ?';
+      db.run(updateSql, [artist_name, bio, now, userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to update profile', details: err.message });
+        }
+        
+        // Return updated profile
+        db.get('SELECT * FROM user_profiles WHERE user_id = ?', [userId], (err, profile) => {
+          if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve updated profile', details: err.message });
+          }
+          res.json(profile);
         });
       });
-      // We might also need cue points if the gallery player uses them directly
-      const cuesSql = "SELECT id, time FROM cue_points WHERE projectId = ? ORDER BY time ASC";
-      const cuePoints = await new Promise((resolve, reject) => {
-          db.all(cuesSql, [project.id], (err, cueRows) => {
-              if(err) reject(err);
-              resolve(cueRows || []);
-          });
+    } else {
+      // Create new profile
+      const insertSql = 'INSERT INTO user_profiles (user_id, artist_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?)';
+      db.run(insertSql, [userId, artist_name, bio, now, now], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to create profile', details: err.message });
+        }
+        
+        // Return new profile
+        db.get('SELECT * FROM user_profiles WHERE user_id = ?', [userId], (err, profile) => {
+          if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve new profile', details: err.message });
+          }
+          res.json(profile);
+        });
       });
-      return { ...project, tracks, cuePoints };
-    }));
-
-    res.json(projectsWithTracks);
-  } catch (err) {
-    console.error("Gallery projects error:", err);
-    res.status(500).json({ error: 'Failed to retrieve gallery projects', details: err.message });
-  }
+    }
+  });
 });
 
-// --- End Gallery Route ---
-
-
-// --- Project and Related Routes (for authenticated users/owners) ---
-
-// Get all projects for the logged-in user (My Projects)
-app.get('/api/projects', isAuthenticated, (req, res) => {
-  const userId = req.session.userId;
-  db.all("SELECT * FROM projects WHERE userId = ? ORDER BY updatedAt DESC", [userId], (err, rows) => {
+// Get user's own social links
+app.get('/api/my/profile/social-links', authenticateUser, (req, res) => {
+  const sql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+  db.all(sql, [req.user.id], (err, rows) => {
     if (err) {
-      res.status(500).json({ error: 'Failed to retrieve your projects', details: err.message });
-      return;
+      return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
     }
     res.json(rows);
   });
 });
 
-// Create a new project
-app.post('/api/projects', isAuthenticated, (req, res) => {
+// Add new social link
+app.post('/api/my/profile/social-links', authenticateUser, (req, res) => {
+  const { label, url, display_order } = req.body;
+  
+  if (!label || !url) {
+    return res.status(400).json({ error: 'Label and URL are required' });
+  }
+  
+  const newLink = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    label: label.trim(),
+    url: url.trim(),
+    display_order: display_order || 0,
+    created_at: new Date().toISOString()
+  };
+  
+  const sql = 'INSERT INTO user_social_links (id, user_id, label, url, display_order, created_at) VALUES (?, ?, ?, ?, ?, ?)';
+  db.run(sql, [newLink.id, newLink.user_id, newLink.label, newLink.url, newLink.display_order, newLink.created_at], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to create social link', details: err.message });
+    }
+    
+    res.status(201).json(newLink);
+  });
+});
+
+// Update social link
+app.put('/api/my/profile/social-links/:linkId', authenticateUser, (req, res) => {
+  const { linkId } = req.params;
+  const { label, url, display_order } = req.body;
+  
+  if (!label || !url) {
+    return res.status(400).json({ error: 'Label and URL are required' });
+  }
+  
+  const sql = 'UPDATE user_social_links SET label = ?, url = ?, display_order = ? WHERE id = ? AND user_id = ?';
+  db.run(sql, [label.trim(), url.trim(), display_order || 0, linkId, req.user.id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update social link', details: err.message });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Social link not found' });
+    }
+    
+    // Return updated link
+    db.get('SELECT * FROM user_social_links WHERE id = ?', [linkId], (err, link) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve updated link', details: err.message });
+      }
+      res.json(link);
+    });
+  });
+});
+
+// Delete social link
+app.delete('/api/my/profile/social-links/:linkId', authenticateUser, (req, res) => {
+  const { linkId } = req.params;
+  
+  const selectSql = 'SELECT * FROM user_social_links WHERE id = ? AND user_id = ?';
+  db.get(selectSql, [linkId, req.user.id], (err, link) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error finding social link', details: err.message });
+    }
+    if (!link) {
+      return res.status(404).json({ error: 'Social link not found' });
+    }
+    
+    const deleteSql = 'DELETE FROM user_social_links WHERE id = ? AND user_id = ?';
+    db.run(deleteSql, [linkId, req.user.id], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to delete social link', details: err.message });
+      }
+      
+      res.json(link);
+    });
+  });
+});
+
+// Get public user profile
+app.get('/api/users/:username/profile', (req, res) => {
+  const { username } = req.params;
+  
+  const userSql = 'SELECT id, username, created_at FROM users WHERE username = ?';
+  db.get(userSql, [username], (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to find user', details: err.message });
+    }
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const profileSql = 'SELECT * FROM user_profiles WHERE user_id = ?';
+    const linksSql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+    
+    db.get(profileSql, [user.id], (err, profile) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve profile', details: err.message });
+      }
+      
+      db.all(linksSql, [user.id], (err, socialLinks) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
+        }
+        
+        res.json({
+          user: {
+            id: user.id,
+            username: user.username,
+            created_at: user.created_at
+          },
+          profile: profile || { user_id: user.id, artist_name: null, bio: null },
+          socialLinks: socialLinks || []
+        });
+      });
+    });
+  });
+});
+
+// User Project Management Routes (Authenticated)
+
+// Get user's own projects
+app.get('/api/my/projects', authenticateUser, (req, res) => {
+  const sql = 'SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC';
+  db.all(sql, [req.user.id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve projects', details: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Create new project
+app.post('/api/my/projects', authenticateUser, (req, res) => {
   const { name } = req.body;
   const userId = req.session.userId;
 
@@ -309,209 +440,188 @@ app.post('/api/projects', isAuthenticated, (req, res) => {
     id: uuidv4(),
     userId,
     name,
-    createdAt: now,
-    updatedAt: now
+    user_id: req.user.id,
+    status: 'draft',
+    created_at: new Date().toISOString(),
+    published_at: null
   };
 
-  const sql = `INSERT INTO projects (id, userId, name, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`;
-  db.run(sql, [newProject.id, newProject.userId, newProject.name, newProject.createdAt, newProject.updatedAt], function(err) {
+  const sql = 'INSERT INTO projects (id, name, user_id, status, created_at, published_at) VALUES (?, ?, ?, ?, ?, ?)';
+  db.run(sql, [newProject.id, newProject.name, newProject.user_id, newProject.status, newProject.created_at, newProject.published_at], function(err) {
     if (err) {
-      res.status(500).json({ error: 'Failed to create project', details: err.message });
-      return;
+      return res.status(500).json({ error: 'Failed to create project', details: err.message });
     }
-    // Create project directory for audio files (project_data.json is no longer needed)
+    
+    // Create project directory
     const projectDir = path.join(__dirname, 'projects', newProject.id);
-    fs.mkdirSync(projectDir, { recursive: true }); // Audio subfolder will be created by multer
+    fs.mkdirSync(projectDir, { recursive: true });
 
     res.status(201).json(newProject);
   });
 });
 
-// Get a specific project (details including tracks and cues) - For owner
-app.get('/api/projects/:projectId', isAuthenticated, isProjectOwner, (req, res) => {
+// Get user's own project details
+app.get('/api/my/projects/:projectId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId } = req.params;
-  // Project details are already verified by isProjectOwner, but we fetch again to get all fields
-  const projectSql = "SELECT * FROM projects WHERE id = ?";
-  const tracksSql = "SELECT * FROM tracks WHERE projectId = ?";
-  const cuesSql = "SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC";
+  const projectSql = 'SELECT * FROM projects WHERE id = ?';
+  const tracksSql = 'SELECT * FROM tracks WHERE project_id = ?';
+  const cuesSql = 'SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC';
 
   db.get(projectSql, [projectId], (err, project) => {
     if (err) {
-      return res.status(500).json({ error: 'Failed to retrieve project details', details: err.message });
-    }
-    // isProjectOwner should have caught if project is null, but as a safeguard
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+      return res.status(500).json({ error: 'Failed to retrieve project', details: err.message });
     }
 
     db.all(tracksSql, [projectId], (err, tracks) => {
       if (err) {
         return res.status(500).json({ error: 'Failed to retrieve tracks', details: err.message });
       }
+      
       db.all(cuesSql, [projectId], (err, cuePoints) => {
         if (err) {
           return res.status(500).json({ error: 'Failed to retrieve cue points', details: err.message });
         }
+        
         res.json({ ...project, tracks: tracks || [], cuePoints: cuePoints || [] });
       });
     });
   });
 });
 
-// Update a project name
-app.put('/api/projects/:projectId', isAuthenticated, isProjectOwner, (req, res) => {
+// Update user's own project
+app.put('/api/my/projects/:projectId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId } = req.params;
-  const { name } = req.body;
+  const { name, status } = req.body;
 
-  if (!name) {
-    return res.status(400).json({ error: 'Project name is required' });
+  if (!name && !status) {
+    return res.status(400).json({ error: 'Project name or status is required' });
   }
-  const updatedAt = new Date().toISOString();
-  const sql = `UPDATE projects SET name = ?, updatedAt = ? WHERE id = ?`;
-  db.run(sql, [name, updatedAt, projectId], function(err) {
+
+  let sql = 'UPDATE projects SET ';
+  let params = [];
+  let updates = [];
+
+  if (name) {
+    updates.push('name = ?');
+    params.push(name);
+  }
+
+  if (status) {
+    if (status !== 'draft' && status !== 'published') {
+      return res.status(400).json({ error: 'Status must be either "draft" or "published"' });
+    }
+    updates.push('status = ?');
+    params.push(status);
+    
+    if (status === 'published') {
+      updates.push('published_at = ?');
+      params.push(new Date().toISOString());
+    } else {
+      updates.push('published_at = ?');
+      params.push(null);
+    }
+  }
+
+  sql += updates.join(', ') + ' WHERE id = ?';
+  params.push(projectId);
+
+  db.run(sql, params, function(err) {
     if (err) {
       return res.status(500).json({ error: 'Failed to update project', details: err.message });
     }
-    // isProjectOwner ensures project exists, so this.changes should be 1
-    if (this.changes === 0) {
-      // This case should ideally not be reached if isProjectOwner works correctly
-      return res.status(404).json({ error: 'Project not found or no changes made' });
-    }
-    // Fetch the updated project to return it
-    db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: 'Failed to retrieve updated project', details: err.message });
-        }
-        res.json(row);
+    
+    // Fetch updated project
+    db.get('SELECT * FROM projects WHERE id = ?', [projectId], (err, row) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve updated project', details: err.message });
+      }
+      res.json(row);
     });
   });
 });
 
-// Delete a project
-app.delete('/api/projects/:projectId', isAuthenticated, isProjectOwner, (req, res) => {
+// Delete user's own project
+app.delete('/api/my/projects/:projectId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId } = req.params;
   
-  // isProjectOwner has already verified ownership and existence.
-  // We need to fetch the project details to return them, as per original logic.
-  db.get("SELECT * FROM projects WHERE id = ?", [projectId], (err, projectToDelete) => {
+  db.get('SELECT * FROM projects WHERE id = ?', [projectId], (err, project) => {
     if (err) {
-      // This might happen if DB connection fails between isProjectOwner and here
-      return res.status(500).json({ error: 'Error finding project to delete', details: err.message });
-    }
-    if (!projectToDelete) {
-      // Should be caught by isProjectOwner
-      return res.status(404).json({ error: 'Project not found for deletion (safeguard).' });
+      return res.status(500).json({ error: 'Error finding project', details: err.message });
     }
 
-    const sql = "DELETE FROM projects WHERE id = ?";
+    const sql = 'DELETE FROM projects WHERE id = ?';
     db.run(sql, [projectId], function(err) {
       if (err) {
-        return res.status(500).json({ error: 'Failed to delete project from database', details: err.message });
-      }
-      if (this.changes === 0) {
-        // Should have been caught by the get above, but as a safeguard
-        return res.status(404).json({ error: 'Project not found for deletion' });
+        return res.status(500).json({ error: 'Failed to delete project', details: err.message });
       }
 
-      // Delete project directory (ON DELETE CASCADE handles tracks and cues in DB)
+      // Delete project directory
       const projectDir = path.join(__dirname, 'projects', projectId);
       if (fs.existsSync(projectDir)) {
         fs.rmSync(projectDir, { recursive: true, force: true });
       }
-      res.json(projectToDelete); // Return the project that was deleted
+      
+      res.json(project);
     });
   });
 });
 
-// Upload tracks
-app.post('/api/projects/:projectId/tracks', isAuthenticated, isProjectOwner, upload.array('tracks'), async (req, res) => {
+// Upload tracks to user's own project
+app.post('/api/my/projects/:projectId/tracks', authenticateUser, checkProjectOwnership, upload.array('tracks'), async (req, res) => {
   const { projectId } = req.params;
-  // isProjectOwner has already verified the project exists and user is the owner.
-
   const uploadedTracks = [];
-  const insertSql = `INSERT INTO tracks (id, projectId, originalName, path, duration) VALUES (?, ?, ?, ?, ?)`;
-  const projectUpdateSql = `UPDATE projects SET updatedAt = ? WHERE id = ?`;
-  const now = new Date().toISOString();
+  const insertSql = 'INSERT INTO tracks (id, project_id, original_name, path, duration) VALUES (?, ?, ?, ?, ?)';
 
-  try { // Wrap the main logic in try-catch for better error handling at this level
-    for (const file of req.files) {
-      try {
-        const { parseFile } = await import('music-metadata');
-        const metadata = await parseFile(file.path);
-        const duration = metadata.format.duration || 0;
-        const trackId = path.parse(file.filename).name; // UUID from filename
+  for (const file of req.files) {
+    try {
+      const { parseFile } = await import('music-metadata');
+      const metadata = await parseFile(file.path);
+      const duration = metadata.format.duration || 0;
+      const trackId = path.parse(file.filename).name;
 
-        const track = {
-          id: trackId,
-          projectId,
-          originalName: file.originalname,
-          path: `audio/${file.filename}`, // Relative path within the project's audio folder
-          duration
-        };
-        
-        await new Promise((resolve, reject) => {
-          db.run(insertSql, [track.id, track.projectId, track.originalName, track.path, track.duration], function(err) {
-            if (err) {
-              console.error(`Error inserting track ${file.originalname} into DB:`, err);
-              reject(err); // Propagate error
-            } else {
-              uploadedTracks.push(track);
-              resolve();
-            }
-          });
-        });
-      } catch (err) { // Catch errors from file processing or DB insert for a single file
-        console.error(`Error processing file ${file.originalname}:`, err.message);
-        // Optionally, delete the file if DB insert fails or metadata fails
-        // fs.unlinkSync(file.path); 
-        // We might want to inform the client about partial success/failure here
-        // For now, we continue processing other files.
-      }
-    }
-
-    if (uploadedTracks.length > 0) {
-      // Update project's updatedAt timestamp only if tracks were successfully added
+      const track = {
+        id: trackId,
+        project_id: projectId,
+        original_name: file.originalname,
+        path: `audio/${file.filename}`,
+        duration
+      };
+      
       await new Promise((resolve, reject) => {
-        db.run(projectUpdateSql, [now, projectId], function(err) {
+        db.run(insertSql, [track.id, track.project_id, track.original_name, track.path, track.duration], function(err) {
           if (err) {
-            console.error(`Error updating project ${projectId} updatedAt timestamp:`, err.message);
-            // Don't reject here, as tracks were uploaded. Log and continue.
+            reject(err);
+          } else {
+            uploadedTracks.push(track);
+            resolve();
           }
-          resolve();
         });
       });
+    } catch (err) {
+      console.error(`Error processing file ${file.originalname}:`, err);
     }
-    res.status(201).json(uploadedTracks);
-
-  } catch (outerErr) { // Catch any unexpected errors in the overall try block
-    console.error(`Overall error in track upload for project ${projectId}:`, outerErr.message);
-    res.status(500).json({ error: 'Server error during track upload.', details: outerErr.message });
   }
+  
+  res.status(201).json(uploadedTracks);
 });
 
-// Delete a track
-app.delete('/api/projects/:projectId/tracks/:trackId', isAuthenticated, isProjectOwner, (req, res) => {
+// Delete track from user's own project
+app.delete('/api/my/projects/:projectId/tracks/:trackId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId, trackId } = req.params;
-  // isProjectOwner has verified project and ownership
-  const selectSql = "SELECT * FROM tracks WHERE id = ? AND projectId = ?";
-  const deleteSql = "DELETE FROM tracks WHERE id = ? AND projectId = ?";
-  const projectUpdateSql = `UPDATE projects SET updatedAt = ? WHERE id = ?`;
-  const now = new Date().toISOString();
-
+  
+  const selectSql = 'SELECT * FROM tracks WHERE id = ? AND project_id = ?';
   db.get(selectSql, [trackId, projectId], (err, track) => {
     if (err) {
       return res.status(500).json({ error: 'Error finding track', details: err.message });
     }
     if (!track) {
-      return res.status(404).json({ error: 'Track not found in this project' });
+      return res.status(404).json({ error: 'Track not found' });
     }
 
+    const deleteSql = 'DELETE FROM tracks WHERE id = ? AND project_id = ?';
     db.run(deleteSql, [trackId, projectId], function(err) {
       if (err) {
-        return res.status(500).json({ error: 'Failed to delete track from database', details: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Track not found for deletion (safeguard)' });
+        return res.status(500).json({ error: 'Failed to delete track', details: err.message });
       }
 
       // Delete track file
@@ -520,22 +630,15 @@ app.delete('/api/projects/:projectId/tracks/:trackId', isAuthenticated, isProjec
         fs.unlinkSync(trackFilePath);
       }
       
-      // Update project's updatedAt timestamp
-      db.run(projectUpdateSql, [now, projectId], (updateErr) => {
-        if (updateErr) {
-          console.error(`Error updating project ${projectId} updatedAt after track deletion:`, updateErr.message);
-          // Don't fail the whole request, track is deleted. Log and respond.
-        }
-        res.json(track); // Return the track that was deleted
-      });
+      res.json(track);
     });
   });
 });
 
-// Get all cue points for a project
-app.get('/api/projects/:projectId/cues', (req, res) => {
+// Cue point management for user's own projects
+app.get('/api/my/projects/:projectId/cues', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId } = req.params;
-  const sql = "SELECT * FROM cue_points WHERE projectId = ? ORDER BY time ASC";
+  const sql = 'SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC';
 
   db.all(sql, [projectId], (err, rows) => {
     if (err) {
@@ -545,52 +648,38 @@ app.get('/api/projects/:projectId/cues', (req, res) => {
   });
 });
 
-// Create a new cue point
-app.post('/api/projects/:projectId/cues', isAuthenticated, isProjectOwner, (req, res) => {
+app.post('/api/my/projects/:projectId/cues', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId } = req.params;
   const { time } = req.body;
 
   if (time === undefined || time === null || isNaN(parseFloat(time))) {
     return res.status(400).json({ error: 'Valid cue point time is required' });
   }
-  // isProjectOwner has verified project existence and ownership
 
   const newCuePoint = {
     id: uuidv4(),
-    projectId,
+    project_id: projectId,
     time: parseFloat(time)
   };
 
-  const insertSql = `INSERT INTO cue_points (id, projectId, time) VALUES (?, ?, ?)`;
-  const projectUpdateSql = `UPDATE projects SET updatedAt = ? WHERE id = ?`;
-  const now = new Date().toISOString();
-
-  db.run(insertSql, [newCuePoint.id, newCuePoint.projectId, newCuePoint.time], function(err) {
+  const sql = 'INSERT INTO cue_points (id, project_id, time) VALUES (?, ?, ?)';
+  db.run(sql, [newCuePoint.id, newCuePoint.project_id, newCuePoint.time], function(err) {
     if (err) {
       return res.status(500).json({ error: 'Failed to create cue point', details: err.message });
     }
-    const createdCueId = this.lastID; // SQLite specific way to get ID, but we use UUID
-
-    // Update project's updatedAt timestamp
-    db.run(projectUpdateSql, [now, projectId], (updateErr) => {
-      if (updateErr) {
-        console.error(`Error updating project ${projectId} updatedAt after cue creation:`, updateErr.message);
-        // Log error but proceed, cue point is created.
+    
+    db.all('SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC', [projectId], (err, allCues) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve sorted cue points', details: err.message });
       }
-      // Fetch the created cue point to return it (as the original code did for consistency)
-      // Although newCuePoint already has all info.
-      db.get("SELECT * FROM cue_points WHERE id = ?", [newCuePoint.id], (err, createdCueDetails) => {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to retrieve created cue point', details: err.message });
-        }
-        res.status(201).json(createdCueDetails || newCuePoint); // Fallback to newCuePoint if somehow not found
-      });
+      
+      const createdCue = allCues.find(c => c.id === newCuePoint.id);
+      res.status(201).json(createdCue);
     });
   });
 });
 
-// Update a cue point
-app.put('/api/projects/:projectId/cues/:cueId', isAuthenticated, isProjectOwner, (req, res) => {
+app.put('/api/my/projects/:projectId/cues/:cueId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId, cueId } = req.params;
   const { time } = req.body;
 
@@ -599,85 +688,297 @@ app.put('/api/projects/:projectId/cues/:cueId', isAuthenticated, isProjectOwner,
   }
   // isProjectOwner has verified project existence and ownership
 
-  const newTime = parseFloat(time);
-  const projectUpdateSql = `UPDATE projects SET updatedAt = ? WHERE id = ?`;
-  const now = new Date().toISOString();
-  const cueUpdateSql = `UPDATE cue_points SET time = ? WHERE id = ? AND projectId = ?`;
-
-  db.run(cueUpdateSql, [newTime, cueId, projectId], function(err) {
+  const sql = 'UPDATE cue_points SET time = ? WHERE id = ? AND project_id = ?';
+  db.run(sql, [parseFloat(time), cueId, projectId], function(err) {
     if (err) {
       return res.status(500).json({ error: 'Failed to update cue point', details: err.message });
     }
     if (this.changes === 0) {
-      return res.status(404).json({ error: 'Cue point not found or not part of this project' });
+      return res.status(404).json({ error: 'Cue point not found' });
     }
-
-    // Update project's updatedAt timestamp
-    db.run(projectUpdateSql, [now, projectId], (updateErr) => {
-      if (updateErr) {
-        console.error(`Error updating project ${projectId} updatedAt after cue update:`, updateErr.message);
+    
+    db.all('SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC', [projectId], (err, allCues) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve sorted cue points', details: err.message });
       }
-      // Fetch the updated cue point to return it
-      db.get("SELECT * FROM cue_points WHERE id = ? AND projectId = ?", [cueId, projectId], (err, updatedCue) => {
-        if (err) {
-            return res.status(500).json({ error: 'Failed to retrieve updated cue point', details: err.message });
-        }
-        res.json(updatedCue);
-      });
+      
+      const updatedCue = allCues.find(c => c.id === cueId);
+      res.json(updatedCue);
     });
   });
 });
 
-// Delete a cue point
-app.delete('/api/projects/:projectId/cues/:cueId', isAuthenticated, isProjectOwner, (req, res) => {
+app.delete('/api/my/projects/:projectId/cues/:cueId', authenticateUser, checkProjectOwnership, (req, res) => {
   const { projectId, cueId } = req.params;
-  // isProjectOwner has verified project existence and ownership
-
-  const selectSql = "SELECT * FROM cue_points WHERE id = ? AND projectId = ?";
-  const deleteSql = "DELETE FROM cue_points WHERE id = ? AND projectId = ?";
-  const projectUpdateSql = `UPDATE projects SET updatedAt = ? WHERE id = ?`;
-  const now = new Date().toISOString();
-
+  
+  const selectSql = 'SELECT * FROM cue_points WHERE id = ? AND project_id = ?';
   db.get(selectSql, [cueId, projectId], (err, cue) => {
     if (err) {
       return res.status(500).json({ error: 'Error finding cue point', details: err.message });
     }
     if (!cue) {
-      return res.status(404).json({ error: 'Cue point not found in this project' });
+      return res.status(404).json({ error: 'Cue point not found' });
     }
 
+    const deleteSql = 'DELETE FROM cue_points WHERE id = ? AND project_id = ?';
     db.run(deleteSql, [cueId, projectId], function(err) {
       if (err) {
-        return res.status(500).json({ error: 'Failed to delete cue point from database', details: err.message });
-      }
-      if (this.changes === 0) {
-        // Should be caught by the get above, but as a safeguard
-        return res.status(404).json({ error: 'Cue point not found for deletion' });
+        return res.status(500).json({ error: 'Failed to delete cue point', details: err.message });
       }
       
-      // Update project's updatedAt timestamp
-      db.run(projectUpdateSql, [now, projectId], (updateErr) => {
-        if (updateErr) {
-          console.error(`Error updating project ${projectId} updatedAt after cue deletion:`, updateErr.message);
+      res.json(cue);
+    });
+  });
+});
+
+// Public Library Routes (No Authentication Required)
+
+// Get all published projects grouped by user
+app.get('/api/public/projects', (req, res) => {
+  const sql = `
+    SELECT p.*, u.username, up.artist_name, up.bio
+    FROM projects p 
+    JOIN users u ON p.user_id = u.id 
+    LEFT JOIN user_profiles up ON u.id = up.user_id
+    WHERE p.status = 'published' 
+    ORDER BY u.username, p.created_at DESC
+  `;
+  
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve public projects', details: err.message });
+    }
+    
+    // Group projects by username and include profile info
+    const groupedProjects = rows.reduce((acc, project) => {
+      if (!acc[project.username]) {
+        acc[project.username] = {
+          profile: {
+            username: project.username,
+            artist_name: project.artist_name,
+            bio: project.bio
+          },
+          projects: []
+        };
+      }
+      acc[project.username].projects.push(project);
+      return acc;
+    }, {});
+    
+    res.json(groupedProjects);
+  });
+});
+
+// Get all users who have published projects
+app.get('/api/public/users', (req, res) => {
+  const sql = `
+    SELECT DISTINCT u.id, u.username, u.created_at 
+    FROM users u 
+    JOIN projects p ON u.id = p.user_id 
+    WHERE p.status = 'published' 
+    ORDER BY u.username
+  `;
+  
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve users', details: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Get published projects by username
+app.get('/api/public/users/:username/projects', (req, res) => {
+  const { username } = req.params;
+  
+  const sql = `
+    SELECT p.*, u.username 
+    FROM projects p 
+    JOIN users u ON p.user_id = u.id 
+    WHERE u.username = ? AND p.status = 'published' 
+    ORDER BY p.created_at DESC
+  `;
+  
+  db.all(sql, [username], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve user projects', details: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Get published project details
+app.get('/api/public/projects/:projectId', (req, res) => {
+  const { projectId } = req.params;
+  
+  const projectSql = `
+    SELECT p.*, u.username 
+    FROM projects p 
+    JOIN users u ON p.user_id = u.id 
+    WHERE p.id = ? AND p.status = 'published'
+  `;
+  
+  db.get(projectSql, [projectId], (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve project', details: err.message });
+    }
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found or not published' });
+    }
+
+    const tracksSql = 'SELECT * FROM tracks WHERE project_id = ?';
+    const cuesSql = 'SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC';
+
+    db.all(tracksSql, [projectId], (err, tracks) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve tracks', details: err.message });
+      }
+      
+      db.all(cuesSql, [projectId], (err, cuePoints) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to retrieve cue points', details: err.message });
         }
-        res.json(cue); // Return the cue point that was deleted
+        
+        res.json({ ...project, tracks: tracks || [], cuePoints: cuePoints || [] });
       });
     });
   });
 });
 
-// Serve audio files
+// Get cue points for published project
+app.get('/api/public/projects/:projectId/cues', (req, res) => {
+  const { projectId } = req.params;
+  
+  // First check if project is published
+  const checkSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+  db.get(checkSql, [projectId], (err, project) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking project', details: err.message });
+    }
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found or not published' });
+    }
+
+    const sql = 'SELECT * FROM cue_points WHERE project_id = ? ORDER BY time ASC';
+    db.all(sql, [projectId], (err, rows) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve cue points', details: err.message });
+      }
+      res.json(rows);
+    });
+  });
+});
+
+// Serve audio files (with access control)
 app.get('/projects/:projectId/audio/:trackId', (req, res) => {
   try {
     const { projectId, trackId } = req.params;
-    const audioPath = path.join(__dirname, 'projects', projectId, 'audio', trackId);
+    // Ensure the trackId has .mp3 extension if it doesn't already
+    const filename = trackId.endsWith('.mp3') ? trackId : `${trackId}.mp3`;
+    const audioPath = path.join(__dirname, 'projects', projectId, 'audio', filename);
+    
+    console.log(`Audio request: ${audioPath}`);
     
     if (!fs.existsSync(audioPath)) {
+      console.log(`Audio file not found: ${audioPath}`);
       return res.status(404).json({ error: 'Audio file not found' });
     }
+
+    // Function to serve the audio file with proper headers
+    const serveAudioFile = () => {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      console.log(`Serving audio file: ${audioPath}`);
+      res.sendFile(audioPath);
+    };
+
+    // Check if project is published OR user owns the project
+    // Try to get session from header first, then from query parameter
+    const sessionId = req.headers.authorization?.replace('Bearer ', '') || req.query.session;
     
-    res.sendFile(audioPath);
+    if (sessionId) {
+      // User is logged in, check ownership first
+      const userSql = `
+        SELECT u.id 
+        FROM users u 
+        JOIN sessions s ON u.id = s.user_id 
+        WHERE s.id = ? AND s.expires_at > datetime('now')
+      `;
+      
+      db.get(userSql, [sessionId], (err, user) => {
+        if (err) {
+          console.error('Error checking user session:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        if (!user) {
+          console.log('Invalid or expired session');
+          // No valid session, check if project is published
+          const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+          db.get(publicSql, [projectId], (err, publicProject) => {
+            if (err) {
+              console.error('Error checking public status:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+            if (!publicProject) {
+              console.log(`Access denied - project ${projectId} not public and no valid session`);
+              return res.status(403).json({ error: 'Access denied' });
+            }
+            console.log(`Access granted - project ${projectId} is public (invalid session)`);
+            serveAudioFile();
+          });
+          return;
+        }
+        
+        // Valid user session, check if they own the project
+        const ownershipSql = 'SELECT id FROM projects WHERE id = ? AND user_id = ?';
+        db.get(ownershipSql, [projectId, user.id], (err, ownedProject) => {
+          if (err) {
+            console.error('Error checking ownership:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          if (ownedProject) {
+            // User owns the project, allow access regardless of status
+            console.log(`Access granted - user ${user.id} owns project ${projectId}`);
+            return serveAudioFile();
+          }
+          
+          // User doesn't own the project, check if it's published
+          const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+          db.get(publicSql, [projectId], (err, publicProject) => {
+            if (err) {
+              console.error('Error checking public status:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+            if (!publicProject) {
+              console.log(`Access denied - project ${projectId} not public and not owned by user ${user.id}`);
+              return res.status(403).json({ error: 'Access denied' });
+            }
+            console.log(`Access granted - project ${projectId} is public`);
+            serveAudioFile();
+          });
+        });
+      });
+    } else {
+      // No session, only allow if project is published
+      const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+      db.get(publicSql, [projectId], (err, publicProject) => {
+        if (err) {
+          console.error('Error checking public status:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        if (!publicProject) {
+          console.log(`Access denied - project ${projectId} not public and no session`);
+          return res.status(403).json({ error: 'Access denied' });
+        }
+        console.log(`Access granted - project ${projectId} is public (no session)`);
+        serveAudioFile();
+      });
+    }
   } catch (error) {
+    console.error('Error serving audio file:', error);
     res.status(500).json({ error: 'Failed to serve audio file' });
   }
 });
