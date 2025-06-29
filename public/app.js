@@ -22,10 +22,6 @@ let playingProjectData = null;       // Store the project data that's currently 
 // Router state
 let isNavigating = false;
 
-// Auth state
-let currentUser = null; // { id, artistName, email }
-let currentView = 'login'; // Possible views: 'login', 'register', 'gallery', 'my-projects', 'project-detail'
-
 // DOM Elements
 const publicBrowseView = document.getElementById('public-browse-view');
 const loginView = document.getElementById('login-view');
@@ -113,8 +109,10 @@ function setupEventListeners() {
   // Navigation
   document.getElementById('browse-public-btn').addEventListener('click', () => showPublicBrowse());
   document.getElementById('browse-public-auth-btn').addEventListener('click', () => showPublicBrowse());
+  
   document.getElementById('show-login-btn').addEventListener('click', () => showLogin());
   document.getElementById('show-register-btn').addEventListener('click', () => showRegister());
+  
   document.getElementById('my-projects-btn').addEventListener('click', () => showUserDashboard());
   document.getElementById('logout-btn').addEventListener('click', () => logout());
   
@@ -1226,7 +1224,7 @@ function renderTracks(tracks, canEdit) {
   tracksContainer.innerHTML = '';
   const uploadBtnContainer = document.getElementById('upload-track-btn').parentNode; // Get header of tracks section
 
-  if (isOwner) {
+  if (canEdit) {
     uploadBtnContainer.classList.remove('hidden');
   } else {
     uploadBtnContainer.classList.add('hidden');
@@ -1278,7 +1276,7 @@ function renderCuePoints(cuePoints, canEdit) {
   cuesContainer.innerHTML = '';
   const addCueBtnContainer = document.getElementById('add-cue-btn').parentNode;
 
-  if (isOwner) {
+  if (canEdit) {
     addCueBtnContainer.classList.remove('hidden');
   } else {
     addCueBtnContainer.classList.add('hidden');
