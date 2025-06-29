@@ -40,71 +40,50 @@ const db = new sqlite3.Database(dbPath, (err) => {
         }
       });
 
-      // Drop existing projects table and recreate with new schema
-      db.run('DROP TABLE IF EXISTS projects', (err) => {
+      // Create projects table with user ownership and status
+      db.run(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          status TEXT DEFAULT 'draft',
+          created_at TEXT NOT NULL,
+          published_at TEXT,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `, (err) => {
         if (err) {
-          console.error('Error dropping projects table', err.message);
-        } else {
-          // Create new projects table with user ownership and status
-          db.run(`
-            CREATE TABLE projects (
-              id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              user_id TEXT NOT NULL,
-              status TEXT DEFAULT 'draft',
-              created_at TEXT NOT NULL,
-              published_at TEXT,
-              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-          `, (err) => {
-            if (err) {
-              console.error('Error creating projects table', err.message);
-            }
-          });
+          console.error('Error creating projects table', err.message);
         }
       });
 
-      // Drop existing tracks table and recreate with new schema
-      db.run('DROP TABLE IF EXISTS tracks', (err) => {
+      // Create tracks table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS tracks (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          path TEXT NOT NULL,
+          duration REAL NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+      `, (err) => {
         if (err) {
-          console.error('Error dropping tracks table', err.message);
-        } else {
-          // Create tracks table
-          db.run(`
-            CREATE TABLE tracks (
-              id TEXT PRIMARY KEY,
-              project_id TEXT NOT NULL,
-              original_name TEXT NOT NULL,
-              path TEXT NOT NULL,
-              duration REAL NOT NULL,
-              FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
-          `, (err) => {
-            if (err) {
-              console.error('Error creating tracks table', err.message);
-            }
-          });
+          console.error('Error creating tracks table', err.message);
         }
       });
 
-      // Drop existing cue_points table and recreate with new schema
-      db.run('DROP TABLE IF EXISTS cue_points', (err) => {
+      // Create cue_points table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS cue_points (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          time REAL NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+      `, (err) => {
         if (err) {
-          console.error('Error dropping cue_points table', err.message);
-        } else {
-          // Create cue_points table
-          db.run(`
-            CREATE TABLE cue_points (
-              id TEXT PRIMARY KEY,
-              project_id TEXT NOT NULL,
-              time REAL NOT NULL,
-              FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
-          `, (err) => {
-            if (err) {
-              console.error('Error creating cue_points table', err.message);
-            }
-          });
+          console.error('Error creating cue_points table', err.message);
         }
       });
     });

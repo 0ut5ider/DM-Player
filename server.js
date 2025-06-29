@@ -77,7 +77,8 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const fileId = uuidv4();
-    cb(null, `${fileId}${path.extname(file.originalname)}`);
+    // Always save MP3 files with .mp3 extension for consistency
+    cb(null, `${fileId}.mp3`);
   }
 });
 
@@ -640,50 +641,112 @@ app.get('/api/public/projects/:projectId/cues', (req, res) => {
 app.get('/projects/:projectId/audio/:trackId', (req, res) => {
   try {
     const { projectId, trackId } = req.params;
-    const audioPath = path.join(__dirname, 'projects', projectId, 'audio', trackId);
+    // Ensure the trackId has .mp3 extension if it doesn't already
+    const filename = trackId.endsWith('.mp3') ? trackId : `${trackId}.mp3`;
+    const audioPath = path.join(__dirname, 'projects', projectId, 'audio', filename);
+    
+    console.log(`Audio request: ${audioPath}`);
     
     if (!fs.existsSync(audioPath)) {
+      console.log(`Audio file not found: ${audioPath}`);
       return res.status(404).json({ error: 'Audio file not found' });
     }
 
+    // Function to serve the audio file with proper headers
+    const serveAudioFile = () => {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      console.log(`Serving audio file: ${audioPath}`);
+      res.sendFile(audioPath);
+    };
+
     // Check if project is published OR user owns the project
-    const sessionId = req.headers.authorization?.replace('Bearer ', '');
+    // Try to get session from header first, then from query parameter
+    const sessionId = req.headers.authorization?.replace('Bearer ', '') || req.query.session;
     
     if (sessionId) {
-      // User is logged in, check ownership
-      const ownershipSql = `
-        SELECT p.id 
-        FROM projects p 
-        JOIN sessions s ON p.user_id = s.user_id 
-        WHERE p.id = ? AND s.id = ? AND s.expires_at > datetime('now')
+      // User is logged in, check ownership first
+      const userSql = `
+        SELECT u.id 
+        FROM users u 
+        JOIN sessions s ON u.id = s.user_id 
+        WHERE s.id = ? AND s.expires_at > datetime('now')
       `;
       
-      db.get(ownershipSql, [projectId, sessionId], (err, ownedProject) => {
-        if (ownedProject) {
-          // User owns the project, allow access
-          return res.sendFile(audioPath);
+      db.get(userSql, [sessionId], (err, user) => {
+        if (err) {
+          console.error('Error checking user session:', err);
+          return res.status(500).json({ error: 'Database error' });
         }
         
-        // Check if project is published
-        const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
-        db.get(publicSql, [projectId], (err, publicProject) => {
-          if (err || !publicProject) {
-            return res.status(403).json({ error: 'Access denied' });
+        if (!user) {
+          console.log('Invalid or expired session');
+          // No valid session, check if project is published
+          const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+          db.get(publicSql, [projectId], (err, publicProject) => {
+            if (err) {
+              console.error('Error checking public status:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+            if (!publicProject) {
+              console.log(`Access denied - project ${projectId} not public and no valid session`);
+              return res.status(403).json({ error: 'Access denied' });
+            }
+            console.log(`Access granted - project ${projectId} is public (invalid session)`);
+            serveAudioFile();
+          });
+          return;
+        }
+        
+        // Valid user session, check if they own the project
+        const ownershipSql = 'SELECT id FROM projects WHERE id = ? AND user_id = ?';
+        db.get(ownershipSql, [projectId, user.id], (err, ownedProject) => {
+          if (err) {
+            console.error('Error checking ownership:', err);
+            return res.status(500).json({ error: 'Database error' });
           }
-          res.sendFile(audioPath);
+          
+          if (ownedProject) {
+            // User owns the project, allow access regardless of status
+            console.log(`Access granted - user ${user.id} owns project ${projectId}`);
+            return serveAudioFile();
+          }
+          
+          // User doesn't own the project, check if it's published
+          const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
+          db.get(publicSql, [projectId], (err, publicProject) => {
+            if (err) {
+              console.error('Error checking public status:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+            if (!publicProject) {
+              console.log(`Access denied - project ${projectId} not public and not owned by user ${user.id}`);
+              return res.status(403).json({ error: 'Access denied' });
+            }
+            console.log(`Access granted - project ${projectId} is public`);
+            serveAudioFile();
+          });
         });
       });
     } else {
       // No session, only allow if project is published
       const publicSql = 'SELECT id FROM projects WHERE id = ? AND status = "published"';
       db.get(publicSql, [projectId], (err, publicProject) => {
-        if (err || !publicProject) {
+        if (err) {
+          console.error('Error checking public status:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        if (!publicProject) {
+          console.log(`Access denied - project ${projectId} not public and no session`);
           return res.status(403).json({ error: 'Access denied' });
         }
-        res.sendFile(audioPath);
+        console.log(`Access granted - project ${projectId} is public (no session)`);
+        serveAudioFile();
       });
     }
   } catch (error) {
+    console.error('Error serving audio file:', error);
     res.status(500).json({ error: 'Failed to serve audio file' });
   }
 });

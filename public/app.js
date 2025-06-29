@@ -10,6 +10,17 @@ let isPlaying = false;
 let isTrackSwitching = false;
 let isDragging = false;
 let currentView = 'public-browse';
+let currentProjectId = null;
+let isPublicProject = false;
+let currentBrowsePlayingProjectId = null; // Track which project is playing in browse view
+
+// Project context state management
+let currentPlayingProjectId = null;  // Which project's audio is currently playing
+let currentViewingProjectId = null;  // Which project page we're currently viewing
+let playingProjectData = null;       // Store the project data that's currently playing
+
+// Router state
+let isNavigating = false;
 
 // DOM Elements
 const publicBrowseView = document.getElementById('public-browse-view');
@@ -66,8 +77,9 @@ const messageContainer = document.getElementById('message-container');
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
+  setupRouter();
   checkAuthStatus();
-  loadPublicProjects();
+  handleInitialRoute();
 });
 
 // Setup all event listeners
@@ -189,6 +201,195 @@ function setupEventListeners() {
   // Cue point dragging
   document.addEventListener('mousemove', handleCueDrag);
   document.addEventListener('mouseup', handleCueDragEnd);
+  
+  // Mini player controls (add event listeners after DOM is loaded)
+  setTimeout(() => {
+    const miniPlayBtn = document.getElementById('mini-play-btn');
+    const miniPauseBtn = document.getElementById('mini-pause-btn');
+    const miniStopBtn = document.getElementById('mini-stop-btn');
+    const returnToProjectBtn = document.getElementById('return-to-project-btn');
+    
+    if (miniPlayBtn) miniPlayBtn.addEventListener('click', playAudio);
+    if (miniPauseBtn) miniPauseBtn.addEventListener('click', pauseAudio);
+    if (miniStopBtn) miniStopBtn.addEventListener('click', () => {
+      stopAudio();
+      hideMiniPlayer();
+    });
+    if (returnToProjectBtn) returnToProjectBtn.addEventListener('click', returnToProject);
+  }, 100);
+}
+
+// Router Functions
+
+function setupRouter() {
+  // Handle browser back/forward navigation
+  window.addEventListener('popstate', (event) => {
+    if (!isNavigating) {
+      handleRoute(window.location.pathname, false);
+    }
+  });
+}
+
+function handleInitialRoute() {
+  const path = window.location.pathname;
+  handleRoute(path, false);
+}
+
+function handleRoute(path, pushState = true) {
+  if (isNavigating) return;
+  
+  isNavigating = true;
+  
+  // Update URL if needed
+  if (pushState && window.location.pathname !== path) {
+    window.history.pushState(null, '', path);
+  }
+  
+  // Route to appropriate view
+  if (path === '/' || path === '/browse') {
+    routeToPublicBrowse();
+  } else if (path === '/login') {
+    routeToLogin();
+  } else if (path === '/register') {
+    routeToRegister();
+  } else if (path === '/my-projects') {
+    routeToUserDashboard();
+  } else if (path.startsWith('/project/')) {
+    const projectId = path.split('/')[2];
+    if (projectId) {
+      routeToProject(projectId);
+    } else {
+      routeToPublicBrowse(); // Fallback
+    }
+  } else {
+    // Unknown route, redirect to browse
+    routeToPublicBrowse();
+  }
+  
+  isNavigating = false;
+}
+
+function routeToPublicBrowse() {
+  // Show mini-player when leaving project context with active audio
+  if (currentView === 'project-detail' && isPlaying && currentProject && currentTrack) {
+    showMiniPlayer();
+  }
+  
+  hideAllViews();
+  publicBrowseView.classList.remove('hidden');
+  currentView = 'public-browse';
+  updateNavButtons();
+  updatePageTitle('Browse Music');
+  loadPublicProjects();
+}
+
+function routeToLogin() {
+  // Show mini-player when leaving project context with active audio
+  if (currentView === 'project-detail' && isPlaying && currentProject && currentTrack) {
+    showMiniPlayer();
+  }
+  
+  hideAllViews();
+  loginView.classList.remove('hidden');
+  currentView = 'login';
+  updateNavButtons();
+  updatePageTitle('Login');
+}
+
+function routeToRegister() {
+  // Show mini-player when leaving project context with active audio
+  if (currentView === 'project-detail' && isPlaying && currentProject && currentTrack) {
+    showMiniPlayer();
+  }
+  
+  hideAllViews();
+  registerView.classList.remove('hidden');
+  currentView = 'register';
+  updateNavButtons();
+  updatePageTitle('Register');
+}
+
+function routeToUserDashboard() {
+  if (!currentUser) {
+    navigateTo('/login');
+    return;
+  }
+  
+  // Show mini-player when leaving project context with active audio
+  if (currentView === 'project-detail' && isPlaying && currentProject && currentTrack) {
+    showMiniPlayer();
+  }
+  
+  hideAllViews();
+  userDashboardView.classList.remove('hidden');
+  currentView = 'user-dashboard';
+  updateNavButtons();
+  updatePageTitle('My Projects');
+  loadUserProjects();
+}
+
+async function routeToProject(projectId) {
+  try {
+    currentProjectId = projectId;
+    
+    // Try to load as user's project first
+    let endpoint = `/api/my/projects/${projectId}`;
+    let response = await apiRequest(endpoint);
+    let isPublic = false;
+    
+    // If not found or not authorized, try as public project
+    if (!response.ok) {
+      endpoint = `/api/public/projects/${projectId}`;
+      response = await apiRequest(endpoint);
+      isPublic = true;
+    }
+    
+    if (!response.ok) {
+      showMessage('Project not found.', 'error');
+      navigateTo('/browse');
+      return;
+    }
+    
+    const projectData = await response.json();
+    currentProject = projectData;
+    isPublicProject = isPublic;
+    
+    // Only hide mini-player if returning to the currently playing project
+    if (currentPlayingProjectId === projectId) {
+      hideMiniPlayer();
+    } else if (currentPlayingProjectId && isPlaying) {
+      // Show mini-player when viewing a different project while audio is playing
+      showMiniPlayer();
+    }
+    
+    hideAllViews();
+    projectDetailView.classList.remove('hidden');
+    backButton.classList.remove('hidden');
+    currentView = 'project-detail';
+    updateNavButtons();
+    updatePageTitle(projectData.name);
+    
+    // Update project context state
+    updateProjectContextState();
+    
+    renderProjectDetails(projectData, isPublic);
+    renderTracks(projectData.tracks || [], !isPublic);
+    renderCuePoints(projectData.cuePoints || [], !isPublic);
+  } catch (error) {
+    console.error('Error loading project:', error);
+    showMessage('Failed to load project.', 'error');
+    navigateTo('/browse');
+  }
+}
+
+function navigateTo(path) {
+  if (window.location.pathname !== path) {
+    handleRoute(path, true);
+  }
+}
+
+function updatePageTitle(title) {
+  document.title = title ? `${title} - DM Player` : 'DM Player - Open Music Library';
 }
 
 // Authentication Functions
@@ -314,38 +515,19 @@ function showAuthenticatedNav() {
 }
 
 function showPublicBrowse() {
-  hideAllViews();
-  publicBrowseView.classList.remove('hidden');
-  currentView = 'public-browse';
-  updateNavButtons();
-  loadPublicProjects();
+  navigateTo('/browse');
 }
 
 function showLogin() {
-  hideAllViews();
-  loginView.classList.remove('hidden');
-  currentView = 'login';
-  updateNavButtons();
+  navigateTo('/login');
 }
 
 function showRegister() {
-  hideAllViews();
-  registerView.classList.remove('hidden');
-  currentView = 'register';
-  updateNavButtons();
+  navigateTo('/register');
 }
 
 function showUserDashboard() {
-  if (!currentUser) {
-    showLogin();
-    return;
-  }
-  
-  hideAllViews();
-  userDashboardView.classList.remove('hidden');
-  currentView = 'user-dashboard';
-  updateNavButtons();
-  loadUserProjects();
+  navigateTo('/my-projects');
 }
 
 function showProjectDetail() {
@@ -379,10 +561,67 @@ function updateNavButtons() {
 }
 
 function handleBackButton() {
+  // Show mini-player when navigating back from project detail with active audio
+  if (currentView === 'project-detail' && isPlaying && currentProject && currentTrack) {
+    showMiniPlayer();
+  }
+  
   if (currentUser) {
     showUserDashboard();
   } else {
     showPublicBrowse();
+  }
+}
+
+// Mini Player Functions
+function showMiniPlayer() {
+  if (!currentProject || !currentTrack) return;
+  
+  const miniPlayer = document.getElementById('mini-player');
+  if (!miniPlayer) return;
+  
+  // Update mini player content - show project name with track name styling
+  const trackName = document.getElementById('mini-track-name');
+  const projectName = document.getElementById('mini-project-name');
+  
+  // Use the track name element to display the project name (keeps the prominent styling)
+  if (trackName) trackName.textContent = currentProject.name;
+  // Hide the project name element since we're using the track name element instead
+  if (projectName) projectName.style.display = 'none';
+  
+  miniPlayer.classList.remove('hidden');
+}
+
+function hideMiniPlayer() {
+  const miniPlayer = document.getElementById('mini-player');
+  if (miniPlayer) {
+    miniPlayer.classList.add('hidden');
+  }
+}
+
+function returnToProject() {
+  if (playingProjectData) {
+    navigateTo(`/project/${playingProjectData.id}`);
+  }
+}
+
+function updateMiniPlayerControls() {
+  const miniPlayBtn = document.getElementById('mini-play-btn');
+  const miniPauseBtn = document.getElementById('mini-pause-btn');
+  
+  if (!miniPlayBtn || !miniPauseBtn) return;
+  
+  if (isPlaying) {
+    miniPlayBtn.classList.add('hidden');
+    miniPauseBtn.classList.remove('hidden');
+    
+    // Show mini player if not on project detail view and audio is playing
+    if (currentView !== 'project-detail' && currentProject && currentTrack) {
+      showMiniPlayer();
+    }
+  } else {
+    miniPlayBtn.classList.remove('hidden');
+    miniPauseBtn.classList.add('hidden');
   }
 }
 
@@ -758,21 +997,28 @@ function renderPublicProjects(groupedProjects) {
       projectCard.className = 'project-card';
       
       const publishedDate = new Date(project.published_at).toLocaleDateString();
+      const isCurrentlyPlaying = currentBrowsePlayingProjectId === project.id && isPlaying;
       
       projectCard.innerHTML = `
         <div class="project-card-header">
-          <h4>${escapeHtml(project.name)}</h4>
+          <h4 class="project-title-link" style="cursor: pointer; color: #007bff; text-decoration: underline;">${escapeHtml(project.name)}</h4>
           <span class="published-date">Published ${publishedDate}</span>
         </div>
         <div class="project-card-actions">
-          <button class="play-project-btn">
-            <i class="fas fa-play"></i> Listen
+          <button class="play-project-btn" data-project-id="${project.id}">
+            <i class="fas fa-${isCurrentlyPlaying ? 'stop' : 'play'}"></i> ${isCurrentlyPlaying ? 'Stop Listen' : 'Listen'}
           </button>
         </div>
       `;
       
+      // Make project title clickable - navigates to project page
+      projectCard.querySelector('.project-title-link').addEventListener('click', () => {
+        navigateTo(`/project/${project.id}`);
+      });
+      
+      // Listen button - direct play/stop control
       projectCard.querySelector('.play-project-btn').addEventListener('click', () => {
-        loadProjectDetails(project.id, true);
+        handleBrowsePlayControl(project);
       });
       
       projectsGrid.appendChild(projectCard);
@@ -816,7 +1062,7 @@ function renderUserProjects(projects) {
     
     projectItem.addEventListener('click', (e) => {
       if (e.target.closest('.project-actions')) return;
-      loadProjectDetails(project.id, false);
+      navigateTo(`/project/${project.id}`);
     });
     
     projectItem.querySelector('.edit-btn').addEventListener('click', (e) => {
@@ -1024,17 +1270,70 @@ function closeAllModals() {
 
 // Audio Player Functions
 
+function setAudioSource(track) {
+  if (!track || !currentProject) return;
+  
+  // Include session token as query parameter if user is logged in
+  let audioUrl = `/projects/${currentProject.id}/audio/${track.id}.mp3`;
+  if (sessionId) {
+    audioUrl += `?session=${sessionId}`;
+  }
+  
+  audioPlayer.src = audioUrl;
+  currentTrackNameElement.textContent = track.original_name;
+  
+  // Add error handling for audio loading
+  audioPlayer.addEventListener('error', function onAudioError(e) {
+    console.error('Audio loading error:', audioPlayer.error);
+    let errorMessage = 'Failed to load audio file. ';
+    
+    if (audioPlayer.error) {
+      switch (audioPlayer.error.code) {
+        case audioPlayer.error.MEDIA_ERR_ABORTED:
+          errorMessage += 'Loading was aborted.';
+          break;
+        case audioPlayer.error.MEDIA_ERR_NETWORK:
+          errorMessage += 'Network error occurred.';
+          break;
+        case audioPlayer.error.MEDIA_ERR_DECODE:
+          errorMessage += 'Audio file is corrupted or unsupported.';
+          break;
+        case audioPlayer.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          errorMessage += 'Audio format not supported.';
+          break;
+        default:
+          errorMessage += 'Unknown error occurred.';
+      }
+    }
+    
+    showMessage(errorMessage, 'error');
+    audioPlayer.removeEventListener('error', onAudioError);
+  }, { once: true });
+}
+
 function playTrack(track) {
   if (!track) return;
   
   currentTrack = track;
-  audioPlayer.src = `/projects/${currentProject.id}/audio/${track.id}.mp3`;
-  currentTrackNameElement.textContent = track.original_name;
+  setAudioSource(track);
+  
+  // Set playing project context
+  if (currentProject) {
+    setPlayingProjectContext(currentProject.id, currentProject);
+  }
   
   playAudio();
 }
 
 function playAudio() {
+  // If we're viewing a different project than what's currently playing, start this project's audio
+  if (currentPlayingProjectId && currentProject && currentPlayingProjectId !== currentProject.id) {
+    // Stop current audio and start new project
+    stopAudio();
+    // Clear the playing project context
+    clearPlayingProjectContext();
+  }
+  
   if (!currentProject || !currentProject.tracks || !currentProject.tracks.length) {
     showMessage('No tracks available to play.', 'error');
     return;
@@ -1043,20 +1342,59 @@ function playAudio() {
   if (!currentTrack) {
     const randomIndex = Math.floor(Math.random() * currentProject.tracks.length);
     currentTrack = currentProject.tracks[randomIndex];
-    audioPlayer.src = `/projects/${currentProject.id}/audio/${currentTrack.id}.mp3`;
-    currentTrackNameElement.textContent = currentTrack.original_name;
+    setAudioSource(currentTrack);
   }
+  
+  // Set playing project context
+  if (currentProject) {
+    setPlayingProjectContext(currentProject.id, currentProject);
+  }
+  
+  // Add loading state
+  playButton.disabled = true;
+  playButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   
   audioPlayer.play()
     .then(() => {
       isPlaying = true;
       playButton.classList.add('hidden');
       pauseButton.classList.remove('hidden');
+      playButton.disabled = false;
+      playButton.innerHTML = '<i class="fas fa-play"></i>';
       updateUpcomingCuePoints();
+      updateMiniPlayerControls();
     })
     .catch(error => {
       console.error('Error playing audio:', error);
-      showMessage('Failed to play audio. Please try again.', 'error');
+      playButton.disabled = false;
+      playButton.innerHTML = '<i class="fas fa-play"></i>';
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to play audio. ';
+      if (error.name === 'NotSupportedError') {
+        errorMessage += 'The audio file format is not supported or the file is corrupted.';
+      } else if (error.name === 'NotAllowedError') {
+        errorMessage += 'Audio playback was blocked. Please interact with the page first.';
+      } else if (error.name === 'AbortError') {
+        errorMessage += 'Audio loading was interrupted.';
+      } else {
+        errorMessage += 'Please check your connection and try again.';
+      }
+      
+      showMessage(errorMessage, 'error');
+      
+      // Try to load a different track if available
+      if (currentProject.tracks.length > 1) {
+        setTimeout(() => {
+          const otherTracks = currentProject.tracks.filter(t => t.id !== currentTrack.id);
+          if (otherTracks.length > 0) {
+            const randomIndex = Math.floor(Math.random() * otherTracks.length);
+            currentTrack = otherTracks[randomIndex];
+            setAudioSource(currentTrack);
+            showMessage('Trying alternative track...', 'info');
+          }
+        }, 1000);
+      }
     });
 }
 
@@ -1065,6 +1403,10 @@ function pauseAudio() {
   isPlaying = false;
   pauseButton.classList.add('hidden');
   playButton.classList.remove('hidden');
+  updateMiniPlayerControls();
+  
+  // Update browse view button states
+  updateBrowseButtonStates();
 }
 
 function stopAudio() {
@@ -1075,6 +1417,16 @@ function stopAudio() {
   playButton.classList.remove('hidden');
   progressIndicator.style.width = '0%';
   currentTimeElement.textContent = '0:00';
+  updateMiniPlayerControls();
+  
+  // Clear playing project context when stopping audio
+  clearPlayingProjectContext();
+  
+  // Update browse view button states if we're stopping browse audio
+  if (currentBrowsePlayingProjectId) {
+    currentBrowsePlayingProjectId = null;
+    updateBrowseButtonStates();
+  }
 }
 
 function seekAudio(event) {
@@ -1106,14 +1458,23 @@ function updateProgress() {
   const currentTime = audioPlayer.currentTime;
   const duration = audioPlayer.duration;
   
-  const progress = (currentTime / duration) * 100;
-  progressIndicator.style.width = `${progress}%`;
-  progressHandle.style.left = `${progress}%`;
-  cuePlaybackIndicator.style.width = `${progress}%`;
+  // Only update progress UI when viewing the playing project or in browse view
+  const shouldUpdateProgress = isViewingPlayingProject() || currentView === 'public-browse';
   
-  currentTimeElement.textContent = formatTime(currentTime);
+  if (shouldUpdateProgress && isPlaying) {
+    const progress = (currentTime / duration) * 100;
+    progressIndicator.style.width = `${progress}%`;
+    progressHandle.style.left = `${progress}%`;
+    cuePlaybackIndicator.style.width = `${progress}%`;
+    
+    currentTimeElement.textContent = formatTime(currentTime);
+  }
   
+  // Always check cue points regardless of view (for track switching logic)
   checkCuePoints();
+  
+  // Update UI visibility
+  updateAudioUIVisibility();
 }
 
 function updateTotalTime() {
@@ -1179,7 +1540,14 @@ function switchToRandomTrack() {
     console.log(`Switching from ${currentTrack?.original_name || 'None'} to track: ${newTrack.original_name} at time ${previousTime.toFixed(2)}s`);
 
     currentTrack = newTrack;
-    audioPlayer.src = `/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
+    
+    // Include session token as query parameter if user is logged in
+    let audioUrl = `/projects/${currentProject.id}/audio/${newTrack.id}.mp3`;
+    if (sessionId) {
+      audioUrl += `?session=${sessionId}`;
+    }
+    
+    audioPlayer.src = audioUrl;
     currentTrackNameElement.textContent = newTrack.original_name;
 
     audioPlayer.addEventListener('loadedmetadata', function onMetadataLoaded() {
@@ -1206,6 +1574,12 @@ function switchToRandomTrack() {
             console.log(`Playback started for ${newTrack.original_name} at ${audioPlayer.currentTime.toFixed(2)}s`);
             updateUpcomingCuePoints();
             isTrackSwitching = false;
+            
+            // Update mini-player if it's visible
+            if (currentView !== 'project-detail') {
+              showMiniPlayer();
+            }
+            
             console.log('Track switch complete.');
           })
           .catch(error => {
@@ -1250,24 +1624,42 @@ function updateCueTimeline() {
     return;
   }
   
-  cuePointsContainer.innerHTML = '';
-  if (currentProject.cuePoints) {
-    currentProject.cuePoints.forEach(cue => {
-      if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
-      const dot = document.createElement('div');
-      dot.className = 'cue-point';
-      dot.style.left = (cue.time / duration * 100) + '%';
-      dot.style.backgroundColor = cueColors[cue.id];
-      dot.addEventListener('mousedown', (e) => {
-        draggingCueId = cue.id;
-        e.preventDefault();
+  // Always show cue points when viewing a project detail page
+  if (currentView === 'project-detail' || currentView === 'public-browse') {
+    cuePointsContainer.innerHTML = '';
+    if (currentProject.cuePoints) {
+      currentProject.cuePoints.forEach(cue => {
+        if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
+        const dot = document.createElement('div');
+        dot.className = 'cue-point';
+        dot.style.left = (cue.time / duration * 100) + '%';
+        dot.style.backgroundColor = cueColors[cue.id];
+        
+        // Only allow dragging if user can edit (owns the project)
+        if (!isPublicProject && currentUser) {
+          dot.addEventListener('mousedown', (e) => {
+            draggingCueId = cue.id;
+            e.preventDefault();
+          });
+        }
+        
+        cuePointsContainer.appendChild(dot);
       });
-      cuePointsContainer.appendChild(dot);
-    });
+    }
+    
+    // Only show progress indicator when viewing the playing project AND audio is playing
+    const shouldShowProgress = isViewingPlayingProject() || currentView === 'public-browse';
+    if (shouldShowProgress && isPlaying && isViewingPlayingProject()) {
+      const progress = (audioPlayer.currentTime / duration) * 100;
+      cuePlaybackIndicator.style.width = progress + '%';
+    } else {
+      cuePlaybackIndicator.style.width = '0%';
+    }
+  } else {
+    // Clear cue timeline when not in project context
+    cuePointsContainer.innerHTML = '';
+    cuePlaybackIndicator.style.width = '0%';
   }
-  
-  const progress = (audioPlayer.currentTime / duration) * 100;
-  cuePlaybackIndicator.style.width = progress + '%';
 }
 
 function handleCueDrag(e) {
@@ -1295,6 +1687,202 @@ function handleCueDragEnd() {
   }).catch(err => console.error('Cue drag update failed', err));
   
   renderCuePoints(currentProject.cuePoints, true);
+}
+
+// Browse View Audio Control Functions
+
+async function handleBrowsePlayControl(project) {
+  const isCurrentlyPlaying = currentBrowsePlayingProjectId === project.id && isPlaying;
+  
+  if (isCurrentlyPlaying) {
+    // Stop current audio
+    stopBrowseAudio();
+  } else {
+    // Start playing this project
+    await playBrowseProject(project);
+  }
+}
+
+async function playBrowseProject(project) {
+  try {
+    // Stop any currently playing audio
+    if (isPlaying) {
+      stopBrowseAudio();
+    }
+    
+    // Load project data
+    const response = await apiRequest(`/api/public/projects/${project.id}`);
+    if (!response.ok) {
+      showMessage('Failed to load project for playback.', 'error');
+      return;
+    }
+    
+    const projectData = await response.json();
+    
+    if (!projectData.tracks || projectData.tracks.length === 0) {
+      showMessage('No tracks available in this project.', 'error');
+      return;
+    }
+    
+    // Set up the project for playback
+    currentProject = projectData;
+    currentBrowsePlayingProjectId = project.id;
+    
+    // Select a random track to start with
+    const randomIndex = Math.floor(Math.random() * projectData.tracks.length);
+    currentTrack = projectData.tracks[randomIndex];
+    
+    // Set audio source and play
+    setAudioSource(currentTrack);
+    
+    // Add loading state to the button
+    const playBtn = document.querySelector(`[data-project-id="${project.id}"]`);
+    if (playBtn) {
+      playBtn.disabled = true;
+      playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    }
+    
+    audioPlayer.play()
+      .then(() => {
+        isPlaying = true;
+        
+        // Set playing project context
+        setPlayingProjectContext(project.id, projectData);
+        
+        updateUpcomingCuePoints();
+        updateBrowseButtonStates();
+        showMessage(`Now playing: ${currentTrack.original_name}`, 'success');
+      })
+      .catch(error => {
+        console.error('Error playing audio:', error);
+        showMessage('Failed to play audio. Please try again.', 'error');
+        currentBrowsePlayingProjectId = null;
+        updateBrowseButtonStates();
+      });
+      
+  } catch (error) {
+    console.error('Error loading project for playback:', error);
+    showMessage('Failed to load project for playback.', 'error');
+    currentBrowsePlayingProjectId = null;
+    updateBrowseButtonStates();
+  }
+}
+
+function stopBrowseAudio() {
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
+  isPlaying = false;
+  currentBrowsePlayingProjectId = null;
+  updateBrowseButtonStates();
+  showMessage('Audio stopped.', 'info');
+}
+
+function updateBrowseButtonStates() {
+  // Update all project card buttons in the browse view
+  const playButtons = document.querySelectorAll('.play-project-btn[data-project-id]');
+  
+  playButtons.forEach(button => {
+    const projectId = button.getAttribute('data-project-id');
+    const isCurrentlyPlaying = currentBrowsePlayingProjectId === projectId && isPlaying;
+    
+    button.disabled = false;
+    if (isCurrentlyPlaying) {
+      button.innerHTML = '<i class="fas fa-stop"></i> Stop Listen';
+    } else {
+      button.innerHTML = '<i class="fas fa-play"></i> Listen';
+    }
+  });
+}
+
+// Project Context Helper Functions
+
+function isViewingPlayingProject() {
+  return currentPlayingProjectId && currentViewingProjectId && 
+         currentPlayingProjectId === currentViewingProjectId;
+}
+
+function shouldShowAudioControls() {
+  return isViewingPlayingProject() || currentView === 'public-browse';
+}
+
+function updateProjectContextState() {
+  // Update viewing project ID based on current view and project
+  if (currentView === 'project-detail' && currentProject) {
+    currentViewingProjectId = currentProject.id;
+  } else {
+    currentViewingProjectId = null;
+  }
+  
+  // Update UI based on context match
+  updateAudioUIVisibility();
+}
+
+function updateAudioUIVisibility() {
+  const isContextMatch = isViewingPlayingProject();
+  const showControls = shouldShowAudioControls();
+  
+  // Progress bar elements
+  const progressElements = [
+    progressIndicator,
+    progressHandle,
+    currentTimeElement,
+    totalTimeElement
+  ];
+  
+  // Cue timeline elements
+  const cueElements = [
+    cueTimeline,
+    cuePlaybackIndicator,
+    cuePointsContainer
+  ];
+  
+  // Show/hide progress elements based on context
+  progressElements.forEach(element => {
+    if (element) {
+      if (showControls && isPlaying) {
+        element.style.visibility = isContextMatch ? 'visible' : 'hidden';
+      } else {
+        element.style.visibility = 'visible';
+      }
+    }
+  });
+  
+  // Show/hide cue elements based on context
+  cueElements.forEach(element => {
+    if (element) {
+      if (showControls && isPlaying) {
+        element.style.visibility = isContextMatch ? 'visible' : 'hidden';
+      } else {
+        element.style.visibility = 'visible';
+      }
+    }
+  });
+  
+  // Update track name display
+  if (currentTrackNameElement) {
+    if (isPlaying && !isContextMatch && currentView === 'project-detail') {
+      currentTrackNameElement.textContent = 'Audio playing from different project';
+      currentTrackNameElement.style.fontStyle = 'italic';
+      currentTrackNameElement.style.opacity = '0.7';
+    } else if (currentTrack) {
+      currentTrackNameElement.textContent = currentTrack.original_name;
+      currentTrackNameElement.style.fontStyle = 'normal';
+      currentTrackNameElement.style.opacity = '1';
+    }
+  }
+}
+
+function setPlayingProjectContext(projectId, projectData) {
+  currentPlayingProjectId = projectId;
+  playingProjectData = projectData;
+  updateProjectContextState();
+}
+
+function clearPlayingProjectContext() {
+  currentPlayingProjectId = null;
+  playingProjectData = null;
+  updateProjectContextState();
+  hideMiniPlayer();
 }
 
 // Helper Functions

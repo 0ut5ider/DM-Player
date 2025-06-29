@@ -127,6 +127,7 @@ index.html (structure)
 │   ├── Player Controls
 │   ├── Tracks Section
 │   └── Cue Points Section
+├── Mini Player (cross-project audio control)
 └── Modal System
     ├── Create Project
     ├── Edit Project
@@ -138,10 +139,15 @@ index.html (structure)
 ### State Management Patterns
 - **Authentication State**: Current user, session token, login status
 - **Global State**: Current project, playback state, UI state, current view
+- **Project Context State**: Playing vs viewing project tracking
+  - `currentPlayingProjectId`: Which project's audio is currently playing
+  - `currentViewingProjectId`: Which project page is currently being viewed
+  - `playingProjectData`: Full data of the project currently playing audio
 - **Local Storage**: Session token persistence for authentication
 - **Real-time Updates**: Immediate UI updates after successful API calls
 - **Error Handling**: User-friendly error messages for all failure scenarios
 - **Navigation State**: Track current view and handle back button functionality
+- **Cross-Project Audio Management**: Smart handling of audio when navigating between projects
 
 ## Audio Processing Patterns
 

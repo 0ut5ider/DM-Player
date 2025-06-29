@@ -58,12 +58,29 @@
   - Seamless track transitions
   - Cue-point-aware seeking
 
+- **Mini-Player Cross-Project Navigation**: Smart audio control across projects
+  - Mini-player stays visible when navigating between different projects
+  - Context-aware audio controls that prevent conflicts
+  - Smart project context management (playing vs viewing projects)
+  - Cross-project audio management prevents multiple streams
+  - Return to playing project functionality
+  - Proper cleanup when audio is stopped
+
 - **Visual Timeline**: Interactive cue point management
   - Visual dots showing cue point positions
   - Drag-and-drop cue point editing
   - Progress indicator overlay
   - Color-coded cue points
   - Timeline synchronization with audio progress
+
+### Cross-Project UI Management ✅
+- **Progress Bar Isolation**: Progress bar only updates when viewing the project that's currently playing audio
+  - No cross-project progress pollution
+  - Clear visualization of playback state for current project
+
+- **Cue Timeline Separation**: Static cue points always shown, dynamic progress only for playing project
+  - Proper separation between visual representation and playback state
+  - Prevents confusing UI updates when viewing different projects
 
 ### Database Layer ✅
 - **Multi-User SQLite Schema**: Robust data persistence

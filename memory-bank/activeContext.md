@@ -2,6 +2,77 @@
 
 ## Current Work Focus
 
+### Cross-Project Progress Bar and Timeline Fix Complete ✅
+**Status**: Completed (29/06/2025, 4:03 PM)  
+**Task**: Fix progress bar and cue timeline updating when viewing different projects while audio plays from another
+
+Successfully implemented a comprehensive fix to prevent progress bar and cue timeline pollution when navigating between projects with active audio playback.
+
+**Problem**: 
+- When audio was playing from Project A and user navigated to Project B, the progress bar and cue timeline in Project B would show progress from Project A's audio
+- This created confusing visual feedback where users saw misleading progress information
+- Cue timeline showed dynamic progress that didn't match the current project's cue points
+
+**Solution**: Implemented strict project context isolation with the following improvements:
+- **Progress Bar Isolation**: Progress bar only updates when viewing the project that's currently playing audio
+- **Cue Timeline Separation**: Static cue points always shown for current project, but dynamic progress only shown for playing project
+- **Context-Aware Updates**: Enhanced logic to distinguish between static display and dynamic progress updates
+- **Cross-Project UI Protection**: Prevents UI pollution when viewing different projects than the one playing audio
+
+**Technical Implementation**:
+- Modified `updateProgress()` to only update UI when viewing the playing project or in browse view
+- Enhanced `updateCueTimeline()` to separate static cue point display from dynamic progress indication
+- Added stricter project context validation before updating progress-related UI elements
+- Improved `isViewingPlayingProject()` logic for better context awareness
+- Ensured timeline shows cue points always but progress only for correct project context
+
+### Mini-Player Cross-Project Navigation Fix Complete ✅
+**Status**: Completed (29/06/2025, 3:51 PM)  
+**Task**: Fix mini-player behavior when navigating between different projects while audio is playing
+
+Successfully implemented a comprehensive fix for mini-player visibility and audio control conflicts when navigating between different projects.
+
+**Problem**: 
+- Mini-player would disappear when navigating to a different project while audio was playing from another project
+- Play/Stop buttons on different projects would interfere with each other's audio streams
+- Users lost control of audio when viewing projects different from the one playing audio
+
+**Solution**: Implemented smart project context management with the following improvements:
+- **Smart Mini-Player Visibility**: Mini-player now stays visible when viewing different projects while audio plays from another
+- **Context-Aware Audio Controls**: Play/Stop buttons behave differently based on whether you're viewing the playing project or a different one
+- **Project Context Tracking**: Added comprehensive state management for playing vs viewing project contexts
+- **Cross-Project Audio Management**: Prevents audio conflicts and provides clear control over which project's audio is active
+
+**Technical Implementation**:
+- Modified `routeToProject()` to only hide mini-player when returning to currently playing project
+- Enhanced `playAudio()` to detect and handle cross-project scenarios
+- Updated `stopAudio()` to properly clear playing project context
+- Added helper functions: `setPlayingProjectContext()`, `clearPlayingProjectContext()`, `isViewingPlayingProject()`
+- Improved `returnToProject()` to use correct project data for navigation
+
+### Cue Points Timeline Display Fix Complete ✅
+**Status**: Completed (29/06/2025, 3:22 PM)  
+**Task**: Fix cue points not displaying on the cue-timeline for both old and new projects
+
+Successfully identified and fixed the root cause of cue points not displaying on the timeline. The issue was in the `updateCueTimeline()` function which had overly restrictive conditions that prevented cue points from showing in most scenarios.
+
+**Problem**: The function only displayed cue points when both `shouldShowAudioControls()` AND `isViewingPlayingProject()` were true, which meant:
+- New projects (no audio playing) never showed cue points
+- Old projects (when not currently playing) never showed cue points
+- Only projects currently playing audio would show their cue points
+
+**Solution**: Modified the logic to always show cue points when viewing a project detail page, regardless of playback state. The timeline now shows:
+- Cue points whenever viewing any project (old or new)
+- Progress indicator only when that specific project is playing
+- Proper drag-and-drop functionality for project owners
+- Correct visual representation of all cue points
+
+### URL Routing Implementation Complete ✅
+**Status**: Completed (29/06/2025, 1:10 PM)  
+**Task**: Add URL routing and page identification to DM-Player
+
+Successfully implemented comprehensive URL routing system with proper page identification. Each page now has its own URL and the application supports browser back/forward navigation. Added clear page identification comments to make it easier to reference specific pages for future changes.
+
 ### Memory Bank Update Complete ✅
 **Status**: Completed (29/06/2025, 12:53 PM)  
 **Task**: Comprehensive memory bank review and update
@@ -10,7 +81,23 @@ The memory bank has been thoroughly reviewed and confirmed to accurately reflect
 
 ## Recent Changes
 
-### Memory Bank Review (Current Session)
+### Mini-Player Cross-Project Navigation Fix (Current Session)
+- **Identified**: Mini-player disappearing when navigating between projects and audio control conflicts
+- **Implemented**: Smart project context management with state variables for playing vs viewing projects
+- **Enhanced**: Context-aware audio controls that behave differently based on project context
+- **Added**: Helper functions for managing playing project context (`setPlayingProjectContext`, `clearPlayingProjectContext`)
+- **Improved**: Mini-player visibility logic to stay visible when viewing different projects
+- **Fixed**: Audio control conflicts by implementing cross-project audio management
+- **Tested**: Navigation scenarios verified to work correctly across all project contexts
+
+### Cue Points Timeline Fix (Previous Session)
+- **Identified**: Root cause in `updateCueTimeline()` function's restrictive display logic
+- **Fixed**: Modified function to always show cue points on project detail pages
+- **Enhanced**: Added proper ownership checks for drag-and-drop functionality
+- **Improved**: Separated cue point display from playback progress indication
+- **Tested**: Logic verified to work for both new projects and existing projects
+
+### Memory Bank Review (Previous Session)
 - **Reviewed**: All 6 memory bank files for accuracy and completeness
 - **Verified**: Documentation matches actual implementation
 - **Confirmed**: All technical details are current and accurate
