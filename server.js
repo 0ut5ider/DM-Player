@@ -13,6 +13,20 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json());
 app.use(express.static('public'));
 
+// Catch-all handler for client-side routing (must be after static middleware)
+app.use((req, res, next) => {
+  // Only handle GET requests for routes that don't start with /api/ or /projects/
+  if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/projects/')) {
+    // Check if it's a request for a static file (has file extension)
+    const hasExtension = path.extname(req.path) !== '';
+    if (!hasExtension) {
+      // This is likely a client-side route, serve index.html
+      return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
+  }
+  next();
+});
+
 // Ensure projects directory exists
 if (!fs.existsSync('./projects')) {
   fs.mkdirSync('./projects', { recursive: true });
