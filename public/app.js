@@ -277,7 +277,7 @@ function handleRoute(path, pushState = true) {
   }
   
   // Route to appropriate view
-  if (path === '/' || path === '/browse') {
+  if (path === '/') {
     routeToPublicBrowse();
   } else if (path === '/login') {
     routeToLogin();
@@ -293,7 +293,7 @@ function handleRoute(path, pushState = true) {
       routeToPublicBrowse(); // Fallback
     }
   } else {
-    // Unknown route, redirect to browse
+    // Unknown route, redirect to home
     routeToPublicBrowse();
   }
   
@@ -377,7 +377,7 @@ async function routeToProject(projectId) {
     
     if (!response.ok) {
       showMessage('Project not found.', 'error');
-      navigateTo('/browse');
+      navigateTo('/');
       return;
     }
     
@@ -409,7 +409,7 @@ async function routeToProject(projectId) {
   } catch (error) {
     console.error('Error loading project:', error);
     showMessage('Failed to load project.', 'error');
-    navigateTo('/browse');
+    navigateTo('/');
   }
 }
 
@@ -546,7 +546,7 @@ function showAuthenticatedNav() {
 }
 
 function showPublicBrowse() {
-  navigateTo('/browse');
+  navigateTo('/');
 }
 
 function showLogin() {
