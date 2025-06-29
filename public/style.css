@@ -1075,3 +1075,366 @@ header h1 {
 .return-btn:hover {
   background-color: #3a5bef;
 }
+
+/* Dashboard Tabs */
+.dashboard-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.tab-button {
+  background-color: transparent;
+  border: none;
+  color: var(--secondary-color);
+  padding: 15px 25px;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+  flex: 1;
+  justify-content: center;
+}
+
+.tab-button:hover {
+  background-color: rgba(74, 107, 255, 0.05);
+  color: var(--primary-color);
+}
+
+.tab-button.active {
+  background-color: rgba(74, 107, 255, 0.1);
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 600;
+}
+
+.tab-content {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  padding: 25px;
+  min-height: 400px;
+}
+
+/* Profile Form */
+.profile-form-container {
+  max-width: 800px;
+}
+
+.profile-form {
+  margin-bottom: 30px;
+}
+
+.profile-form .form-group {
+  margin-bottom: 25px;
+}
+
+.profile-form .form-group label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 8px;
+}
+
+.profile-form .form-group input,
+.profile-form .form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  resize: vertical;
+}
+
+.profile-form .form-group input:focus,
+.profile-form .form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(74, 107, 255, 0.1);
+}
+
+.form-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.85rem;
+  color: var(--secondary-color);
+  font-style: italic;
+}
+
+/* Social Links Section */
+.social-links-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 25px;
+}
+
+.social-links-section .section-header {
+  margin-bottom: 20px;
+}
+
+.social-links-section .section-header h4 {
+  color: var(--text-color);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.social-links-container {
+  background-color: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 15px;
+  min-height: 100px;
+}
+
+.social-link-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  margin-bottom: 10px;
+  transition: all 0.2s;
+}
+
+.social-link-item:last-child {
+  margin-bottom: 0;
+}
+
+.social-link-item:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.social-link-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.social-link-label {
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 2px;
+}
+
+.social-link-url {
+  color: var(--primary-color);
+  font-size: 0.9rem;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.social-link-url:hover {
+  text-decoration: underline;
+}
+
+.social-link-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.social-link-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--secondary-color);
+  transition: color 0.2s;
+  padding: 5px;
+  border-radius: 4px;
+}
+
+.social-link-actions button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.social-link-actions .edit-btn:hover {
+  color: var(--primary-color);
+}
+
+.social-link-actions .delete-btn:hover {
+  color: var(--danger-color);
+}
+
+/* Profile Display in Public Views */
+.artist-profile-info {
+  background-color: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.artist-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 5px;
+}
+
+.artist-username {
+  font-size: 0.9rem;
+  color: var(--secondary-color);
+  margin-bottom: 10px;
+}
+
+.artist-bio {
+  color: var(--text-color);
+  line-height: 1.5;
+  margin-bottom: 15px;
+}
+
+.artist-bio p {
+  margin-bottom: 10px;
+}
+
+.artist-bio p:last-child {
+  margin-bottom: 0;
+}
+
+.artist-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.artist-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--primary-color);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.artist-social-link:hover {
+  background-color: var(--primary-color);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.artist-social-link i {
+  font-size: 0.9rem;
+}
+
+/* Enhanced User Section for Public Browse */
+.user-section .user-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-title h3 {
+  margin: 0;
+  color: var(--primary-color);
+}
+
+.username-badge {
+  background-color: rgba(74, 107, 255, 0.1);
+  color: var(--primary-color);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.user-bio-excerpt {
+  color: var(--text-color);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 5px 0;
+}
+
+.user-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.user-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--primary-color);
+  text-decoration: none;
+  font-size: 0.75rem;
+  transition: all 0.2s;
+}
+
+.user-social-link:hover {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* Responsive Design for Profile */
+@media (max-width: 768px) {
+  .dashboard-tabs {
+    flex-direction: column;
+  }
+  
+  .tab-button {
+    justify-content: flex-start;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+  }
+  
+  .tab-button.active {
+    border-bottom: none;
+    border-left-color: var(--primary-color);
+  }
+  
+  .profile-form-container {
+    max-width: none;
+  }
+  
+  .social-link-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .social-link-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .artist-social-links,
+  .user-social-links {
+    justify-content: flex-start;
+  }
+  
+  .user-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+}

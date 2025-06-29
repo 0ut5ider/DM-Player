@@ -112,14 +112,70 @@
         <!-- PAGE: My Projects - User's project dashboard (/my-projects) -->
         <div id="user-dashboard-view" class="main-view hidden">
             <div class="section-header">
-                <h2>My Projects</h2>
-                <button id="create-project-btn" class="action-button">
-                    <i class="fas fa-plus"></i> New Project
+                <h2>My Dashboard</h2>
+            </div>
+            
+            <!-- Dashboard Tabs -->
+            <div class="dashboard-tabs">
+                <button id="projects-tab" class="tab-button active">
+                    <i class="fas fa-folder"></i> Projects
+                </button>
+                <button id="profile-tab" class="tab-button">
+                    <i class="fas fa-user"></i> Profile
                 </button>
             </div>
-            <div id="user-projects-container" class="list-container">
-                <!-- User's projects will be displayed here -->
-                <div class="empty-message">No projects yet. Create one to get started!</div>
+            
+            <!-- Projects Tab Content -->
+            <div id="projects-tab-content" class="tab-content">
+                <div class="section-header">
+                    <h3>My Projects</h3>
+                    <button id="create-project-btn" class="action-button">
+                        <i class="fas fa-plus"></i> New Project
+                    </button>
+                </div>
+                <div id="user-projects-container" class="list-container">
+                    <!-- User's projects will be displayed here -->
+                    <div class="empty-message">No projects yet. Create one to get started!</div>
+                </div>
+            </div>
+            
+            <!-- Profile Tab Content -->
+            <div id="profile-tab-content" class="tab-content hidden">
+                <div class="section-header">
+                    <h3>Artist Profile</h3>
+                    <button id="save-profile-btn" class="action-button">
+                        <i class="fas fa-save"></i> Save Profile
+                    </button>
+                </div>
+                
+                <div class="profile-form-container">
+                    <form id="profile-form" class="profile-form">
+                        <div class="form-group">
+                            <label for="artist-name-input">Artist Name:</label>
+                            <input type="text" id="artist-name-input" placeholder="Your stage/artist name">
+                            <small class="form-help">This will be displayed instead of your username</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="bio-input">Bio/Description:</label>
+                            <textarea id="bio-input" rows="6" placeholder="Tell people about your music... (Markdown supported)"></textarea>
+                            <small class="form-help">You can use Markdown formatting</small>
+                        </div>
+                    </form>
+                    
+                    <div class="social-links-section">
+                        <div class="section-header">
+                            <h4>Social Links</h4>
+                            <button id="add-social-link-btn" class="action-button">
+                                <i class="fas fa-plus"></i> Add Link
+                            </button>
+                        </div>
+                        <div id="social-links-container" class="social-links-container">
+                            <!-- Social links will be displayed here -->
+                            <div class="empty-message">No social links yet. Add some to help people find you!</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -292,6 +348,27 @@
                 <button type="button" id="confirm-cancel" class="cancel-btn">Cancel</button>
                 <button type="button" id="confirm-ok" class="submit-btn danger">Confirm</button>
             </div>
+        </div>
+    </div>
+
+    <div id="social-link-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="social-link-modal-title">Add Social Link</h3>
+            <form id="social-link-form">
+                <input type="hidden" id="social-link-id">
+                <div class="form-group">
+                    <label for="social-link-label">Label:</label>
+                    <input type="text" id="social-link-label" placeholder="e.g., Website, Spotify, Instagram" required>
+                </div>
+                <div class="form-group">
+                    <label for="social-link-url">URL:</label>
+                    <input type="url" id="social-link-url" placeholder="https://..." required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 

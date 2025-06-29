@@ -86,6 +86,39 @@ const db = new sqlite3.Database(dbPath, (err) => {
           console.error('Error creating cue_points table', err.message);
         }
       });
+
+      // Create user_profiles table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_profiles (
+          user_id TEXT PRIMARY KEY,
+          artist_name TEXT,
+          bio TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating user_profiles table', err.message);
+        }
+      });
+
+      // Create user_social_links table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_social_links (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          label TEXT NOT NULL,
+          url TEXT NOT NULL,
+          display_order INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `, (err) => {
+        if (err) {
+          console.error('Error creating user_social_links table', err.message);
+        }
+      });
     });
   }
 });

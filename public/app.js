@@ -30,6 +30,28 @@ const userDashboardView = document.getElementById('user-dashboard-view');
 const projectDetailView = document.getElementById('project-detail-view');
 const backButton = document.getElementById('back-button');
 
+// Dashboard tab elements
+const projectsTab = document.getElementById('projects-tab');
+const profileTab = document.getElementById('profile-tab');
+const projectsTabContent = document.getElementById('projects-tab-content');
+const profileTabContent = document.getElementById('profile-tab-content');
+
+// Profile form elements
+const profileForm = document.getElementById('profile-form');
+const artistNameInput = document.getElementById('artist-name-input');
+const bioInput = document.getElementById('bio-input');
+const saveProfileBtn = document.getElementById('save-profile-btn');
+const socialLinksContainer = document.getElementById('social-links-container');
+const addSocialLinkBtn = document.getElementById('add-social-link-btn');
+
+// Social link modal elements
+const socialLinkModal = document.getElementById('social-link-modal');
+const socialLinkForm = document.getElementById('social-link-form');
+const socialLinkModalTitle = document.getElementById('social-link-modal-title');
+const socialLinkIdInput = document.getElementById('social-link-id');
+const socialLinkLabelInput = document.getElementById('social-link-label');
+const socialLinkUrlInput = document.getElementById('social-link-url');
+
 // Navigation elements
 const anonymousNav = document.getElementById('anonymous-nav');
 const authenticatedNav = document.getElementById('authenticated-nav');
@@ -201,6 +223,15 @@ function setupEventListeners() {
   // Cue point dragging
   document.addEventListener('mousemove', handleCueDrag);
   document.addEventListener('mouseup', handleCueDragEnd);
+  
+  // Dashboard tabs
+  if (projectsTab) projectsTab.addEventListener('click', () => showProjectsTab());
+  if (profileTab) profileTab.addEventListener('click', () => showProfileTab());
+  
+  // Profile management
+  if (saveProfileBtn) saveProfileBtn.addEventListener('click', saveProfile);
+  if (addSocialLinkBtn) addSocialLinkBtn.addEventListener('click', () => showSocialLinkModal());
+  if (socialLinkForm) socialLinkForm.addEventListener('submit', saveSocialLink);
   
   // Mini player controls (add event listeners after DOM is loaded)
   setTimeout(() => {
@@ -981,18 +1012,53 @@ function renderPublicProjects(groupedProjects) {
   }
   
   usernames.sort().forEach(username => {
+    const userData = groupedProjects[username];
+    const profile = userData.profile;
+    const projects = userData.projects;
+    
     const userSection = document.createElement('div');
     userSection.className = 'user-section';
     
-    const userHeader = document.createElement('h3');
+    // Enhanced user header with profile information
+    const userHeader = document.createElement('div');
     userHeader.className = 'user-header';
-    userHeader.textContent = `Music by ${username}`;
+    
+    const userTitle = document.createElement('div');
+    userTitle.className = 'user-title';
+    
+    const artistName = profile.artist_name || username;
+    const displayTitle = profile.artist_name ? 
+      `Music by ${artistName}` : 
+      `Music by ${username}`;
+    
+    userTitle.innerHTML = `
+      <h3>${escapeHtml(displayTitle)}</h3>
+      ${profile.artist_name ? `<span class="username-badge">@${escapeHtml(username)}</span>` : ''}
+    `;
+    
+    userHeader.appendChild(userTitle);
+    
+    // Add bio excerpt if available
+    if (profile.bio) {
+      const bioExcerpt = profile.bio.length > 150 ? 
+        profile.bio.substring(0, 150) + '...' : 
+        profile.bio;
+      
+      const bioElement = document.createElement('div');
+      bioElement.className = 'user-bio-excerpt';
+      bioElement.textContent = bioExcerpt;
+      userHeader.appendChild(bioElement);
+    }
+    
+    // Add social links if available
+    loadUserSocialLinks(username, userHeader);
+    
     userSection.appendChild(userHeader);
     
     const projectsGrid = document.createElement('div');
     projectsGrid.className = 'projects-grid';
     
-    groupedProjects[username].forEach(project => {
+    projects.forEach(project => {
       const projectCard = document.createElement('div');
       projectCard.className = 'project-card';
       
@@ -1027,6 +1093,38 @@ function renderPublicProjects(groupedProjects) {
     userSection.appendChild(projectsGrid);
     publicProjectsContainer.appendChild(userSection);
   });
+}
+
+// Helper function to load and display social links for a user
+async function loadUserSocialLinks(username, headerElement) {
+  try {
+    const response = await apiRequest(`/api/users/${username}/profile`);
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    const socialLinks = data.socialLinks || [];
+    
+    if (socialLinks.length > 0) {
+      const socialLinksContainer = document.createElement('div');
+      socialLinksContainer.className = 'user-social-links';
+      
+      socialLinks.slice(0, 4).forEach(link => { // Limit to 4 links for space
+        const linkElement = document.createElement('a');
+        linkElement.className = 'user-social-link';
+        linkElement.href = link.url;
+        linkElement.target = '_blank';
+        linkElement.rel = 'noopener noreferrer';
+        linkElement.textContent = link.label;
+        
+        socialLinksContainer.appendChild(linkElement);
+      });
+      
+      headerElement.appendChild(socialLinksContainer);
+    }
+  } catch (error) {
+    console.error('Error loading social links for user:', username, error);
+    // Silently fail - social links are optional
+  }
 }
 
 function renderUserProjects(projects) {
@@ -1265,6 +1363,7 @@ function closeAllModals() {
   addCueModal.classList.add('hidden');
   editCueModal.classList.add('hidden');
   confirmModal.classList.add('hidden');
+  socialLinkModal.classList.add('hidden');
   overlay.classList.add('hidden');
 }
 
@@ -1947,4 +2046,221 @@ function escapeHtml(unsafe) {
 
 function getRandomColor() {
   return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+}
+
+// Dashboard Tab Functions
+
+function showProjectsTab() {
+  // Update tab buttons
+  projectsTab.classList.add('active');
+  profileTab.classList.remove('active');
+  
+  // Update tab content
+  projectsTabContent.classList.remove('hidden');
+  profileTabContent.classList.add('hidden');
+}
+
+function showProfileTab() {
+  // Update tab buttons
+  profileTab.classList.add('active');
+  projectsTab.classList.remove('active');
+  
+  // Update tab content
+  profileTabContent.classList.remove('hidden');
+  projectsTabContent.classList.add('hidden');
+  
+  // Load profile data when switching to profile tab
+  loadUserProfile();
+}
+
+// Profile Management Functions
+
+async function loadUserProfile() {
+  if (!currentUser) return;
+  
+  try {
+    const response = await apiRequest('/api/my/profile');
+    if (!response.ok) throw new Error('Failed to load profile');
+    
+    const data = await response.json();
+    populateProfileForm(data.profile, data.socialLinks);
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    showMessage('Failed to load profile data.', 'error');
+  }
+}
+
+function populateProfileForm(profile, socialLinks) {
+  // Populate form fields
+  if (artistNameInput) {
+    artistNameInput.value = profile.artist_name || '';
+  }
+  if (bioInput) {
+    bioInput.value = profile.bio || '';
+  }
+  
+  // Render social links
+  renderSocialLinks(socialLinks || []);
+}
+
+function renderSocialLinks(socialLinks) {
+  if (!socialLinksContainer) return;
+  
+  socialLinksContainer.innerHTML = '';
+  
+  if (socialLinks.length === 0) {
+    socialLinksContainer.innerHTML = '<div class="empty-message">No social links yet. Add some to help people find you!</div>';
+    return;
+  }
+  
+  socialLinks.forEach(link => {
+    const linkItem = document.createElement('div');
+    linkItem.className = 'social-link-item';
+    
+    linkItem.innerHTML = `
+      <div class="social-link-info">
+        <div class="social-link-label">${escapeHtml(link.label)}</div>
+        <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="social-link-url">
+          ${escapeHtml(link.url)}
+        </a>
+      </div>
+      <div class="social-link-actions">
+        <button class="edit-btn" title="Edit Link">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="delete-btn" title="Delete Link">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    `;
+    
+    // Add event listeners
+    linkItem.querySelector('.edit-btn').addEventListener('click', () => {
+      showSocialLinkModal(link);
+    });
+    
+    linkItem.querySelector('.delete-btn').addEventListener('click', () => {
+      deleteSocialLink(link.id);
+    });
+    
+    socialLinksContainer.appendChild(linkItem);
+  });
+}
+
+async function saveProfile() {
+  if (!currentUser) return;
+  
+  const artistName = artistNameInput.value.trim();
+  const bio = bioInput.value.trim();
+  
+  try {
+    const response = await apiRequest('/api/my/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artist_name: artistName || null,
+        bio: bio || null
+      })
+    });
+    
+    if (!response.ok) throw new Error('Failed to save profile');
+    
+    showMessage('Profile saved successfully!', 'success');
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    showMessage('Failed to save profile.', 'error');
+  }
+}
+
+// Social Link Modal Functions
+
+function showSocialLinkModal(link = null) {
+  if (!socialLinkModal) return;
+  
+  // Reset form
+  socialLinkForm.reset();
+  
+  if (link) {
+    // Edit mode
+    socialLinkModalTitle.textContent = 'Edit Social Link';
+    socialLinkIdInput.value = link.id;
+    socialLinkLabelInput.value = link.label;
+    socialLinkUrlInput.value = link.url;
+  } else {
+    // Add mode
+    socialLinkModalTitle.textContent = 'Add Social Link';
+    socialLinkIdInput.value = '';
+  }
+  
+  socialLinkModal.classList.remove('hidden');
+  overlay.classList.remove('hidden');
+  socialLinkLabelInput.focus();
+}
+
+async function saveSocialLink(event) {
+  event.preventDefault();
+  
+  if (!currentUser) return;
+  
+  const linkId = socialLinkIdInput.value;
+  const label = socialLinkLabelInput.value.trim();
+  const url = socialLinkUrlInput.value.trim();
+  
+  if (!label || !url) {
+    showMessage('Label and URL are required.', 'error');
+    return;
+  }
+  
+  try {
+    let response;
+    
+    if (linkId) {
+      // Update existing link
+      response = await apiRequest(`/api/my/profile/social-links/${linkId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, url, display_order: 0 })
+      });
+    } else {
+      // Create new link
+      response = await apiRequest('/api/my/profile/social-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, url, display_order: 0 })
+      });
+    }
+    
+    if (!response.ok) throw new Error('Failed to save social link');
+    
+    closeAllModals();
+    showMessage('Social link saved successfully!', 'success');
+    loadUserProfile(); // Reload to refresh the list
+  } catch (error) {
+    console.error('Error saving social link:', error);
+    showMessage('Failed to save social link.', 'error');
+  }
+}
+
+async function deleteSocialLink(linkId) {
+  if (!currentUser || !linkId) return;
+  
+  showConfirmModal(
+    'Delete Social Link',
+    'Are you sure you want to delete this social link?',
+    async () => {
+      try {
+        const response = await apiRequest(`/api/my/profile/social-links/${linkId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete social link');
+        
+        showMessage('Social link deleted successfully!', 'success');
+        loadUserProfile(); // Reload to refresh the list
+      } catch (error) {
+        console.error('Error deleting social link:', error);
+        showMessage('Failed to delete social link.', 'error');
+      }
+    }
+  );
 }

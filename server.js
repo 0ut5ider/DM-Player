@@ -208,6 +208,211 @@ app.get('/api/auth/me', authenticateUser, (req, res) => {
   res.json(req.user);
 });
 
+// User Profile Management Routes (Authenticated)
+
+// Get user's own profile
+app.get('/api/my/profile', authenticateUser, (req, res) => {
+  const profileSql = 'SELECT * FROM user_profiles WHERE user_id = ?';
+  const linksSql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+  
+  db.get(profileSql, [req.user.id], (err, profile) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve profile', details: err.message });
+    }
+    
+    db.all(linksSql, [req.user.id], (err, socialLinks) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
+      }
+      
+      res.json({
+        profile: profile || { user_id: req.user.id, artist_name: null, bio: null },
+        socialLinks: socialLinks || []
+      });
+    });
+  });
+});
+
+// Update user's own profile
+app.put('/api/my/profile', authenticateUser, (req, res) => {
+  const { artist_name, bio } = req.body;
+  const userId = req.user.id;
+  const now = new Date().toISOString();
+  
+  // Check if profile exists
+  const checkSql = 'SELECT user_id FROM user_profiles WHERE user_id = ?';
+  db.get(checkSql, [userId], (err, existingProfile) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error checking profile', details: err.message });
+    }
+    
+    if (existingProfile) {
+      // Update existing profile
+      const updateSql = 'UPDATE user_profiles SET artist_name = ?, bio = ?, updated_at = ? WHERE user_id = ?';
+      db.run(updateSql, [artist_name, bio, now, userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to update profile', details: err.message });
+        }
+        
+        // Return updated profile
+        db.get('SELECT * FROM user_profiles WHERE user_id = ?', [userId], (err, profile) => {
+          if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve updated profile', details: err.message });
+          }
+          res.json(profile);
+        });
+      });
+    } else {
+      // Create new profile
+      const insertSql = 'INSERT INTO user_profiles (user_id, artist_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?)';
+      db.run(insertSql, [userId, artist_name, bio, now, now], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to create profile', details: err.message });
+        }
+        
+        // Return new profile
+        db.get('SELECT * FROM user_profiles WHERE user_id = ?', [userId], (err, profile) => {
+          if (err) {
+            return res.status(500).json({ error: 'Failed to retrieve new profile', details: err.message });
+          }
+          res.json(profile);
+        });
+      });
+    }
+  });
+});
+
+// Get user's own social links
+app.get('/api/my/profile/social-links', authenticateUser, (req, res) => {
+  const sql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+  db.all(sql, [req.user.id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Add new social link
+app.post('/api/my/profile/social-links', authenticateUser, (req, res) => {
+  const { label, url, display_order } = req.body;
+  
+  if (!label || !url) {
+    return res.status(400).json({ error: 'Label and URL are required' });
+  }
+  
+  const newLink = {
+    id: uuidv4(),
+    user_id: req.user.id,
+    label: label.trim(),
+    url: url.trim(),
+    display_order: display_order || 0,
+    created_at: new Date().toISOString()
+  };
+  
+  const sql = 'INSERT INTO user_social_links (id, user_id, label, url, display_order, created_at) VALUES (?, ?, ?, ?, ?, ?)';
+  db.run(sql, [newLink.id, newLink.user_id, newLink.label, newLink.url, newLink.display_order, newLink.created_at], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to create social link', details: err.message });
+    }
+    
+    res.status(201).json(newLink);
+  });
+});
+
+// Update social link
+app.put('/api/my/profile/social-links/:linkId', authenticateUser, (req, res) => {
+  const { linkId } = req.params;
+  const { label, url, display_order } = req.body;
+  
+  if (!label || !url) {
+    return res.status(400).json({ error: 'Label and URL are required' });
+  }
+  
+  const sql = 'UPDATE user_social_links SET label = ?, url = ?, display_order = ? WHERE id = ? AND user_id = ?';
+  db.run(sql, [label.trim(), url.trim(), display_order || 0, linkId, req.user.id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update social link', details: err.message });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Social link not found' });
+    }
+    
+    // Return updated link
+    db.get('SELECT * FROM user_social_links WHERE id = ?', [linkId], (err, link) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve updated link', details: err.message });
+      }
+      res.json(link);
+    });
+  });
+});
+
+// Delete social link
+app.delete('/api/my/profile/social-links/:linkId', authenticateUser, (req, res) => {
+  const { linkId } = req.params;
+  
+  const selectSql = 'SELECT * FROM user_social_links WHERE id = ? AND user_id = ?';
+  db.get(selectSql, [linkId, req.user.id], (err, link) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error finding social link', details: err.message });
+    }
+    if (!link) {
+      return res.status(404).json({ error: 'Social link not found' });
+    }
+    
+    const deleteSql = 'DELETE FROM user_social_links WHERE id = ? AND user_id = ?';
+    db.run(deleteSql, [linkId, req.user.id], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to delete social link', details: err.message });
+      }
+      
+      res.json(link);
+    });
+  });
+});
+
+// Get public user profile
+app.get('/api/users/:username/profile', (req, res) => {
+  const { username } = req.params;
+  
+  const userSql = 'SELECT id, username, created_at FROM users WHERE username = ?';
+  db.get(userSql, [username], (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to find user', details: err.message });
+    }
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const profileSql = 'SELECT * FROM user_profiles WHERE user_id = ?';
+    const linksSql = 'SELECT * FROM user_social_links WHERE user_id = ? ORDER BY display_order ASC, created_at ASC';
+    
+    db.get(profileSql, [user.id], (err, profile) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to retrieve profile', details: err.message });
+      }
+      
+      db.all(linksSql, [user.id], (err, socialLinks) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to retrieve social links', details: err.message });
+        }
+        
+        res.json({
+          user: {
+            id: user.id,
+            username: user.username,
+            created_at: user.created_at
+          },
+          profile: profile || { user_id: user.id, artist_name: null, bio: null },
+          socialLinks: socialLinks || []
+        });
+      });
+    });
+  });
+});
+
 // User Project Management Routes (Authenticated)
 
 // Get user's own projects
@@ -526,9 +731,10 @@ app.delete('/api/my/projects/:projectId/cues/:cueId', authenticateUser, checkPro
 // Get all published projects grouped by user
 app.get('/api/public/projects', (req, res) => {
   const sql = `
-    SELECT p.*, u.username 
+    SELECT p.*, u.username, up.artist_name, up.bio
     FROM projects p 
     JOIN users u ON p.user_id = u.id 
+    LEFT JOIN user_profiles up ON u.id = up.user_id
     WHERE p.status = 'published' 
     ORDER BY u.username, p.created_at DESC
   `;
@@ -538,12 +744,19 @@ app.get('/api/public/projects', (req, res) => {
       return res.status(500).json({ error: 'Failed to retrieve public projects', details: err.message });
     }
     
-    // Group projects by username
+    // Group projects by username and include profile info
     const groupedProjects = rows.reduce((acc, project) => {
       if (!acc[project.username]) {
-        acc[project.username] = [];
+        acc[project.username] = {
+          profile: {
+            username: project.username,
+            artist_name: project.artist_name,
+            bio: project.bio
+          },
+          projects: []
+        };
       }
-      acc[project.username].push(project);
+      acc[project.username].projects.push(project);
       return acc;
     }, {});
     
