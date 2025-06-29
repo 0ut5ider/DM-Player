@@ -2,6 +2,37 @@
 
 ## Current Work Focus
 
+### Cue Timeline Cross-Project Persistence Fix Complete ✅
+**Status**: Completed (29/06/2025, 7:00 PM)  
+**Task**: Fix cue timeline showing dots from previous projects when creating new projects
+
+Successfully identified and fixed the root cause of cue points persisting visually on the timeline when switching to new projects that have no cue points.
+
+**Problem**: 
+- When creating a new project, the cues container list would be empty (correct)
+- However, the visual cue-timeline would still display the colored dots from the previous project
+- This created confusion where users saw cue points that didn't actually exist in the new project
+- The issue occurred because the timeline wasn't being properly cleared when projects had no cue points
+
+**Root Cause**: 
+- In `updateCueTimeline()` function, the logic checked `if (currentProject.cuePoints)` 
+- For new projects, `cuePoints` property was `undefined` or `null` (not an empty array)
+- This caused the function to skip the cue point rendering loop entirely
+- The visual dots from the previous project remained because they weren't explicitly cleared
+
+**Solution**: Enhanced the cue point validation logic with defensive programming:
+- **Explicit Array Validation**: Added `Array.isArray(currentProject.cuePoints) && currentProject.cuePoints.length > 0` check
+- **Guaranteed Timeline Clearing**: Timeline container is always cleared at the start, ensuring clean state
+- **Defensive Programming**: Proper null/undefined checks prevent similar issues in the future
+- **Clear Documentation**: Added comment explaining the logic for future maintenance
+
+**Technical Implementation**:
+- Modified `updateCueTimeline()` function to use comprehensive validation
+- Changed from `if (currentProject.cuePoints)` to `if (currentProject.cuePoints && Array.isArray(currentProject.cuePoints) && currentProject.cuePoints.length > 0)`
+- Ensured `cuePointsContainer.innerHTML = ''` always clears the visual timeline
+- Added comment: "If no cue points exist, the container remains empty (already cleared above)"
+- Maintained all existing functionality while fixing the edge case
+
 ### Cross-Project Progress Bar and Timeline Fix Complete ✅
 **Status**: Completed (29/06/2025, 4:03 PM)  
 **Task**: Fix progress bar and cue timeline updating when viewing different projects while audio plays from another

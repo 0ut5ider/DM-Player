@@ -82,6 +82,12 @@
   - Proper separation between visual representation and playback state
   - Prevents confusing UI updates when viewing different projects
 
+- **Cue Timeline Cross-Project Persistence Fix**: Visual cue points properly cleared when switching projects
+  - Fixed issue where cue points from previous projects persisted on new project timelines
+  - Enhanced validation logic with defensive programming (Array.isArray checks)
+  - Timeline container always cleared to ensure clean state
+  - Proper null/undefined handling prevents similar issues in the future
+
 ### Database Layer ✅
 - **Multi-User SQLite Schema**: Robust data persistence
   - Users table with authentication data

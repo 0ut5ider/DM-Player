@@ -166,6 +166,11 @@ index.html (structure)
 - **Color-coded Cues**: Visual distinction between different cue points
 - **Real-time Updates**: Timeline synchronization with audio progress
 - **Drag-and-Drop Editing**: Direct manipulation of cue point positions
+- **Cross-Project Timeline Isolation**: Defensive programming prevents visual pollution
+  - Comprehensive validation: `Array.isArray(cuePoints) && cuePoints.length > 0`
+  - Timeline container always cleared before rendering new cue points
+  - Proper null/undefined handling for projects without cue points
+  - Prevents cue points from previous projects persisting on new project timelines
 
 ## Security Patterns
 

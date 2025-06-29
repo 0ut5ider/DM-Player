@@ -1726,7 +1726,9 @@ function updateCueTimeline() {
   // Always show cue points when viewing a project detail page
   if (currentView === 'project-detail' || currentView === 'public-browse') {
     cuePointsContainer.innerHTML = '';
-    if (currentProject.cuePoints) {
+    
+    // Check if project has cue points and they exist as an array with length
+    if (currentProject.cuePoints && Array.isArray(currentProject.cuePoints) && currentProject.cuePoints.length > 0) {
       currentProject.cuePoints.forEach(cue => {
         if (!cueColors[cue.id]) cueColors[cue.id] = getRandomColor();
         const dot = document.createElement('div');
@@ -1745,6 +1747,7 @@ function updateCueTimeline() {
         cuePointsContainer.appendChild(dot);
       });
     }
+    // If no cue points exist, the container remains empty (already cleared above)
     
     // Only show progress indicator when viewing the playing project AND audio is playing
     const shouldShowProgress = isViewingPlayingProject() || currentView === 'public-browse';
