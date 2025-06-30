@@ -237,13 +237,9 @@ function setupEventListeners() {
   
   // Mini player controls (add event listeners after DOM is loaded)
   setTimeout(() => {
-    const miniPlayBtn = document.getElementById('mini-play-btn');
-    const miniPauseBtn = document.getElementById('mini-pause-btn');
     const miniStopBtn = document.getElementById('mini-stop-btn');
     const returnToProjectBtn = document.getElementById('return-to-project-btn');
     
-    if (miniPlayBtn) miniPlayBtn.addEventListener('click', playAudio);
-    if (miniPauseBtn) miniPauseBtn.addEventListener('click', pauseAudio);
     if (miniStopBtn) miniStopBtn.addEventListener('click', () => {
       stopAudio();
       hideMiniPlayer();
@@ -639,22 +635,9 @@ function returnToProject() {
 }
 
 function updateMiniPlayerControls() {
-  const miniPlayBtn = document.getElementById('mini-play-btn');
-  const miniPauseBtn = document.getElementById('mini-pause-btn');
-  
-  if (!miniPlayBtn || !miniPauseBtn) return;
-  
-  if (isPlaying) {
-    miniPlayBtn.classList.add('hidden');
-    miniPauseBtn.classList.remove('hidden');
-    
-    // Show mini player if not on project detail view and audio is playing
-    if (currentView !== 'project-detail' && currentProject && currentTrack) {
-      showMiniPlayer();
-    }
-  } else {
-    miniPlayBtn.classList.remove('hidden');
-    miniPauseBtn.classList.add('hidden');
+  // Show mini player if not on project detail view and audio is playing
+  if (isPlaying && currentView !== 'project-detail' && currentProject && currentTrack) {
+    showMiniPlayer();
   }
 }
 
