@@ -44,7 +44,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
       db.run(`
         CREATE TABLE IF NOT EXISTS projects (
           id TEXT PRIMARY KEY,
-          userId TEXT NOT NULL,
           name TEXT NOT NULL,
           user_id TEXT NOT NULL,
           status TEXT DEFAULT 'draft',
