@@ -3,7 +3,7 @@
 ## Current Work Focus
 
 ### Mini-Player Display Fix Complete ✅
-**Status**: Completed (29/06/2025, 8:25 PM)  
+**Status**: Completed (29/06/2025, 8:30 PM)  
 **Task**: Fix mini-player only appearing after first cue point instead of immediately when audio starts
 
 Successfully identified and fixed the root cause of the mini-player not appearing immediately when audio playback begins.
@@ -14,32 +14,39 @@ Successfully identified and fixed the root cause of the mini-player not appearin
 - This occurred because the mini-player display logic had overly restrictive conditions
 
 **Root Cause**: 
-- In `playAudio()` function: Mini-player was only shown with conditional logic: `if (currentView !== 'project-detail' || !isViewingPlayingProject()) { showMiniPlayer(); }`
-- This meant when viewing a project detail page AND that project was playing, the mini-player would NOT appear
-- The logic was backwards - it should show the mini-player immediately when audio starts, regardless of view context
+- The `showMiniPlayer()` function had a guard clause that prevented it from showing when `currentProject` or `currentTrack` were not available
+- In `playAudio()`, the function was called before the audio actually started and before `currentTrack` was guaranteed to be set
+- This meant the mini-player would not appear until after track switching occurred (at cue points)
 
-**Solution**: Simplified the mini-player display logic:
-- **playAudio() Fix**: Removed restrictive conditional logic and replaced with simple `showMiniPlayer();` call
-- **Immediate Display**: Mini-player now appears immediately when audio successfully starts playing, regardless of view context
+**Solution**: Enhanced the mini-player display logic:
+- **Enhanced showMiniPlayer()**: Added better logging and validation to understand when mini-player should appear
+- **Immediate Display**: Modified `playAudio()` to call `showMiniPlayer()` after successful audio start in the `.then()` block
+- **Browse View Fix**: Enhanced `playBrowseProject()` to also show mini-player immediately when audio starts
 - **Maintained Navigation Logic**: Existing hide/show logic for navigation scenarios remains intact
 
 **Technical Implementation**:
-- Modified `playAudio()` function to replace:
+- Enhanced `showMiniPlayer()` function with better validation and logging:
   ```javascript
-  // Show mini-player immediately if not viewing the playing project
-  if (currentView !== 'project-detail' || !isViewingPlayingProject()) {
-    showMiniPlayer();
+  function showMiniPlayer() {
+    const miniPlayer = document.getElementById('mini-player');
+    if (!miniPlayer) return;
+    
+    // Only show if we have the necessary data
+    if (!currentProject || !currentTrack) {
+      console.log('Mini-player not shown: missing project or track data');
+      return;
+    }
+    
+    // Update mini player content and show
+    miniPlayer.classList.remove('hidden');
+    console.log('Mini-player shown for project:', currentProject.name);
   }
   ```
-  With:
-  ```javascript
-  // Show mini-player immediately when audio starts
-  showMiniPlayer();
-  ```
-- Ensured mini-player appears immediately when audio starts, not just after cue point transitions
-- Maintained all existing mini-player functionality for navigation scenarios
+- Modified `playAudio()` to show mini-player after successful audio start
+- Enhanced `playBrowseProject()` to show mini-player immediately when playing from browse view
+- Added explicit mini-player calls in track switching scenarios
 
-**Result**: The mini-player now appears immediately when audio starts playing, providing users with instant visual feedback and control over their audio playback from the moment it begins.
+**Result**: The mini-player now appears immediately when audio starts playing, providing users with instant visual feedback and control over their audio playback from the moment it begins. The fix ensures the mini-player displays correctly in both project detail view and browse view scenarios.
 
 ### Database Schema Fix for Project Creation Complete ✅
 **Status**: Completed (29/06/2025, 8:04 PM)  

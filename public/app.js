@@ -604,10 +604,14 @@ function handleBackButton() {
 
 // Mini Player Functions
 function showMiniPlayer() {
-  if (!currentProject || !currentTrack) return;
-  
   const miniPlayer = document.getElementById('mini-player');
   if (!miniPlayer) return;
+  
+  // Only show if we have the necessary data
+  if (!currentProject || !currentTrack) {
+    console.log('Mini-player not shown: missing project or track data');
+    return;
+  }
   
   // Update mini player content - show project name with track name styling
   const trackName = document.getElementById('mini-track-name');
@@ -619,6 +623,7 @@ function showMiniPlayer() {
   if (projectName) projectName.style.display = 'none';
   
   miniPlayer.classList.remove('hidden');
+  console.log('Mini-player shown for project:', currentProject.name);
 }
 
 function hideMiniPlayer() {

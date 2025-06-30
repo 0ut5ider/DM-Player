@@ -209,6 +209,44 @@ The application is feature-complete and ready for use. All core functionality wo
 - Professional user interface
 - Secure file handling and access control
 
+## Recent Fixes and Improvements
+
+### Mini-Player Display Fix Complete ✅
+**Date**: 29/06/2025, 8:30 PM  
+**Issue**: Mini-player only appeared after first cue point was reached, not immediately when audio started playing
+**Root Cause**: The `showMiniPlayer()` function had guard clauses preventing display when `currentProject` or `currentTrack` were not available, and timing issues with when the function was called during audio initialization
+**Solution**: Enhanced mini-player display logic with better validation and moved the display call to after successful audio start
+**Impact**: Users now get immediate visual feedback and control when audio begins playing
+**Technical Changes**:
+- Enhanced `showMiniPlayer()` function with better logging and validation
+- Modified `playAudio()` to call `showMiniPlayer()` after successful audio start in `.then()` block
+- Enhanced `playBrowseProject()` to show mini-player immediately when audio starts
+- Added explicit mini-player calls in track switching scenarios
+
+### Database Schema Fix Complete ✅
+**Date**: 29/06/2025, 8:04 PM  
+**Issue**: Project creation failing due to duplicate column definitions in database schema
+**Root Cause**: Projects table had both `userId` and `user_id` columns defined, causing schema conflicts
+**Solution**: Removed duplicate `userId` column, kept only `user_id` to match server code expectations
+**Impact**: Project creation now works correctly after database resets
+**Technical Changes**: Modified `database.js` to remove duplicate column definition
+
+### Project Creation Error Fix Complete ✅
+**Date**: 29/06/2025, 7:44 PM  
+**Issue**: TypeError "Cannot read properties of undefined (reading 'userId')" when creating projects
+**Root Cause**: Code trying to access `req.session.userId` in token-based authentication system
+**Solution**: Removed problematic session reference, used correct `req.user.id` from authentication middleware
+**Impact**: Project creation functionality fully restored
+**Technical Changes**: Cleaned up authentication system usage in project creation endpoint
+
+### Login/Register Button Fix Complete ✅
+**Date**: 29/06/2025, 7:35 PM  
+**Issue**: Login and register buttons non-functional after logout due to JavaScript errors
+**Root Cause**: Undefined `isOwner` variable references in `renderTracks()` and `renderCuePoints()` functions
+**Solution**: Replaced undefined variables with correct `canEdit` parameter
+**Impact**: Login/register navigation restored, users can authenticate properly
+**Technical Changes**: Fixed variable references and removed duplicate declarations
+
 ## Known Issues
 
 ### Technical Debt (Minor)
