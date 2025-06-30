@@ -1460,10 +1460,8 @@ function playAudio() {
       updateUpcomingCuePoints();
       updateMiniPlayerControls();
       
-      // Show mini-player immediately if not viewing the playing project
-      if (currentView !== 'project-detail' || !isViewingPlayingProject()) {
-        showMiniPlayer();
-      }
+      // Show mini-player immediately when audio starts
+      showMiniPlayer();
     })
     .catch(error => {
       console.error('Error playing audio:', error);

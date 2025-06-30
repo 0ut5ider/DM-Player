@@ -3,7 +3,7 @@
 ## Current Work Focus
 
 ### Mini-Player Display Fix Complete ✅
-**Status**: Completed (29/06/2025, 8:20 PM)  
+**Status**: Completed (29/06/2025, 8:25 PM)  
 **Task**: Fix mini-player only appearing after first cue point instead of immediately when audio starts
 
 Successfully identified and fixed the root cause of the mini-player not appearing immediately when audio playback begins.
@@ -11,21 +11,31 @@ Successfully identified and fixed the root cause of the mini-player not appearin
 **Problem**: 
 - Mini-player would only appear after the first cue point was reached during audio playback
 - Users had no visual indication or control over audio when it first started playing
-- This occurred because the mini-player display logic was only triggered during track switching, not initial playback
+- This occurred because the mini-player display logic had overly restrictive conditions
 
 **Root Cause**: 
-- In `playAudio()` function: Mini-player was only updated via `updateMiniPlayerControls()` which had restrictive conditions
-- In `playBrowseProject()` function: No immediate mini-player display after successful audio start
-- The mini-player logic was primarily designed around navigation scenarios, not initial audio start scenarios
+- In `playAudio()` function: Mini-player was only shown with conditional logic: `if (currentView !== 'project-detail' || !isViewingPlayingProject()) { showMiniPlayer(); }`
+- This meant when viewing a project detail page AND that project was playing, the mini-player would NOT appear
+- The logic was backwards - it should show the mini-player immediately when audio starts, regardless of view context
 
-**Solution**: Enhanced audio playback functions to show mini-player immediately:
-- **playAudio() Enhancement**: Added explicit mini-player display check after successful audio start
-- **playBrowseProject() Enhancement**: Added immediate mini-player display when audio starts from browse view
-- **Immediate Display Logic**: Mini-player now appears as soon as audio successfully starts playing, regardless of view context
+**Solution**: Simplified the mini-player display logic:
+- **playAudio() Fix**: Removed restrictive conditional logic and replaced with simple `showMiniPlayer();` call
+- **Immediate Display**: Mini-player now appears immediately when audio successfully starts playing, regardless of view context
+- **Maintained Navigation Logic**: Existing hide/show logic for navigation scenarios remains intact
 
 **Technical Implementation**:
-- Modified `playAudio()` to include: `if (currentView !== 'project-detail' || !isViewingPlayingProject()) { showMiniPlayer(); }`
-- Modified `playBrowseProject()` to include: `showMiniPlayer();` after successful audio start
+- Modified `playAudio()` function to replace:
+  ```javascript
+  // Show mini-player immediately if not viewing the playing project
+  if (currentView !== 'project-detail' || !isViewingPlayingProject()) {
+    showMiniPlayer();
+  }
+  ```
+  With:
+  ```javascript
+  // Show mini-player immediately when audio starts
+  showMiniPlayer();
+  ```
 - Ensured mini-player appears immediately when audio starts, not just after cue point transitions
 - Maintained all existing mini-player functionality for navigation scenarios
 
