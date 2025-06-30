@@ -1459,6 +1459,11 @@ function playAudio() {
       playButton.innerHTML = '<i class="fas fa-play"></i>';
       updateUpcomingCuePoints();
       updateMiniPlayerControls();
+      
+      // Show mini-player immediately if not viewing the playing project
+      if (currentView !== 'project-detail' || !isViewingPlayingProject()) {
+        showMiniPlayer();
+      }
     })
     .catch(error => {
       console.error('Error playing audio:', error);
@@ -1841,17 +1846,20 @@ async function playBrowseProject(project) {
       playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
     }
     
-    audioPlayer.play()
-      .then(() => {
-        isPlaying = true;
-        
-        // Set playing project context
-        setPlayingProjectContext(project.id, projectData);
-        
-        updateUpcomingCuePoints();
-        updateBrowseButtonStates();
-        showMessage(`Now playing: ${currentTrack.original_name}`, 'success');
-      })
+        audioPlayer.play()
+          .then(() => {
+            isPlaying = true;
+            
+            // Set playing project context
+            setPlayingProjectContext(project.id, projectData);
+            
+            updateUpcomingCuePoints();
+            updateBrowseButtonStates();
+            showMessage(`Now playing: ${currentTrack.original_name}`, 'success');
+            
+            // Show mini-player immediately when playing from browse view
+            showMiniPlayer();
+          })
       .catch(error => {
         console.error('Error playing audio:', error);
         showMessage('Failed to play audio. Please try again.', 'error');

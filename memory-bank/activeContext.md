@@ -2,6 +2,35 @@
 
 ## Current Work Focus
 
+### Mini-Player Display Fix Complete ✅
+**Status**: Completed (29/06/2025, 8:20 PM)  
+**Task**: Fix mini-player only appearing after first cue point instead of immediately when audio starts
+
+Successfully identified and fixed the root cause of the mini-player not appearing immediately when audio playback begins.
+
+**Problem**: 
+- Mini-player would only appear after the first cue point was reached during audio playback
+- Users had no visual indication or control over audio when it first started playing
+- This occurred because the mini-player display logic was only triggered during track switching, not initial playback
+
+**Root Cause**: 
+- In `playAudio()` function: Mini-player was only updated via `updateMiniPlayerControls()` which had restrictive conditions
+- In `playBrowseProject()` function: No immediate mini-player display after successful audio start
+- The mini-player logic was primarily designed around navigation scenarios, not initial audio start scenarios
+
+**Solution**: Enhanced audio playback functions to show mini-player immediately:
+- **playAudio() Enhancement**: Added explicit mini-player display check after successful audio start
+- **playBrowseProject() Enhancement**: Added immediate mini-player display when audio starts from browse view
+- **Immediate Display Logic**: Mini-player now appears as soon as audio successfully starts playing, regardless of view context
+
+**Technical Implementation**:
+- Modified `playAudio()` to include: `if (currentView !== 'project-detail' || !isViewingPlayingProject()) { showMiniPlayer(); }`
+- Modified `playBrowseProject()` to include: `showMiniPlayer();` after successful audio start
+- Ensured mini-player appears immediately when audio starts, not just after cue point transitions
+- Maintained all existing mini-player functionality for navigation scenarios
+
+**Result**: The mini-player now appears immediately when audio starts playing, providing users with instant visual feedback and control over their audio playback from the moment it begins.
+
 ### Database Schema Fix for Project Creation Complete ✅
 **Status**: Completed (29/06/2025, 8:04 PM)  
 **Task**: Fix database schema issue preventing project creation after database reset
@@ -218,6 +247,13 @@ The memory bank has been thoroughly reviewed and confirmed to accurately reflect
 
 ## Recent Changes
 
+### Mini-Player Display Fix (Current Session)
+- **Identified**: Mini-player only appearing after first cue point instead of immediately when audio starts
+- **Fixed**: Enhanced `playAudio()` and `playBrowseProject()` functions to show mini-player immediately upon successful audio start
+- **Enhanced**: Added explicit mini-player display logic for both project detail and browse view audio playback
+- **Improved**: Mini-player now provides immediate visual feedback and control as soon as audio begins playing
+- **Verified**: Mini-player appears instantly when audio starts, not just after cue point transitions
+
 ### Project Creation Error Fix (Current Session)
 - **Identified**: TypeError when creating new projects due to incorrect authentication system usage
 - **Fixed**: Removed problematic `req.session.userId` reference and used correct `req.user.id` from token authentication
@@ -264,31 +300,11 @@ The memory bank has been thoroughly reviewed and confirmed to accurately reflect
 
 ## Next Steps
 
-### Mini-Player Simplification Complete ✅
-**Status**: Completed (29/06/2025, 8:12 PM)  
-**Task**: Remove play button from mini-player since it's only used to stop audio streams, not start them
-
-Successfully simplified the mini-player interface by removing unnecessary play and pause buttons, keeping only the essential stop and navigation functionality.
-
-**Changes Made**:
-- **HTML**: Removed `mini-play-btn` and `mini-pause-btn` elements from the mini-player
-- **JavaScript**: Removed event listeners and logic for the removed buttons
-- **Simplified Logic**: Updated `updateMiniPlayerControls()` function to only handle mini-player visibility
-- **Clean Interface**: Mini-player now only shows stop button and return-to-project button
-
-**Technical Implementation**:
-- Removed play and pause button HTML elements from mini-player section
-- Cleaned up event listener setup to only handle remaining buttons (stop and return-to-project)
-- Simplified `updateMiniPlayerControls()` function to focus on visibility logic only
-- Maintained all existing functionality while removing unused controls
-
-**Result**: The mini-player now has a cleaner, more focused interface that aligns with its actual use case as a "currently playing" indicator with stop functionality rather than a full player control.
-
 ### Project Status: Complete and Production Ready ✅
 1. **All core functionality implemented** - System is fully operational
 2. **Multi-user system working** - Authentication, authorization, and project sharing functional
 3. **Audio system complete** - Cue point automation and visual timeline working perfectly
-4. **Mini-player optimized** - Simplified interface with only necessary controls
+4. **Mini-player optimized** - Immediate display with simplified interface and only necessary controls
 5. **Memory bank up-to-date** - All documentation reflects current implementation
 
 ### Optional Future Enhancements (Low Priority)
